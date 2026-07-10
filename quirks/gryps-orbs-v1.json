@@ -1,0 +1,101 @@
+{
+  "registry_version": 1,
+  "venue_id": "gryps-orbs-v1",
+  "venue_name": "Gryps RFQ Perps v1 (Orbs solver, SEI / Symmio settlement)",
+  "chain": "sei",
+  "as_of": "2026-07-10",
+  "sources": [
+    "live solver registry probes 2026-07-10",
+    "Perps Observatory attribution (123-trade cohort, May 2026)",
+    "funding reconciliation 2026-07-04",
+    "team calls Apr-May 2026"
+  ],
+  "quirks": [
+    {
+      "id": "Q-FEES-TIERED",
+      "category": "fees",
+      "severity": "caution",
+      "title": "Trading fees are per-symbol tiered data, not a constant",
+      "detail": "The solver registry carries at least three distinct trading_fee values across symbols (0.5, 5, and 10 bps observed 2026-07-10). Majors sit at 0.5 bps; some symbols carry 10-20x that.",
+      "agent_rule": "Read trading_fee, hedger_fee_open, hedger_fee_close from the registry per symbol at decision time. Never hardcode a fee constant anywhere in strategy logic.",
+      "verified": "2026-07-10",
+      "verification_method": "contract-symbols registry sweep, 659 symbols"
+    },
+    {
+      "id": "Q-FEES-HEDGER-ROUNDTRIP",
+      "category": "fees",
+      "severity": "caution",
+      "title": "Hedger fee applies on open AND close — ~21 bps realized round-trip on majors",
+      "detail": "hedger_fee_open and hedger_fee_close are each 10 bps on majors; with 0.5 bps platform fee x2 the measured cohort friction signature was -21.66 bps round-trip (123 attributed trades). Realized cost is roughly double what a single-side reading suggests.",
+      "agent_rule": "Model round-trip cost as (trading_fee + hedger_fee_open) + (trading_fee + hedger_fee_close) on notional. Strategies with expected edge below ~25 bps round-trip on majors are structurally unprofitable here.",
+      "verified": "2026-07-10",
+      "verification_method": "registry fields + Observatory PnL attribution vs Coinbase reference"
+    },
+    {
+      "id": "Q-ACCT-RPNL-GROSS",
+      "category": "accounting",
+      "severity": "breaking",
+      "title": "realizedPnl is GROSS of fees; fees debit separately on every fill including opens",
+      "detail": "Account identity: balance = deposits + sum(realizedPnl) - sum(fees) + funding. Treating realizedPnl as net double-counts fees and inflates apparent performance.",
+      "agent_rule": "Never treat realizedPnl as net performance. Reconcile with the full identity; expect a fee debit on open fills, not only closes.",
+      "verified": "2026-07-03",
+      "verification_method": "exact-to-the-cent reconciliation on live account"
+    },
+    {
+      "id": "Q-FUND-4H-GRID",
+      "category": "funding",
+      "severity": "caution",
+      "title": "Funding accrues on a 4h grid; positive accumulatedFunding DEBITS the account",
+      "detail": "Funding epochs at 00/04/08/12/16/20 UTC (some symbols 8h — read funding_rate_epoch_duration_ms). Sign convention is inverted vs several venues: positive accumulatedFunding is a charge to the position holder. Observed rate was a flat 0.005% of mark notional per tick with no premium component [unverified beyond two ticks].",
+      "agent_rule": "Read funding_rate_epoch_duration_ms per symbol. Treat positive accumulatedFunding as cost. Do not assume shorts receive funding — unverified on this venue.",
+      "verified": "2026-07-04",
+      "verification_method": "funding reconciliation across two observed ticks, hedger-side identity exact"
+    },
+    {
+      "id": "Q-EXEC-QUOTE-HOLD",
+      "category": "execution",
+      "severity": "info",
+      "title": "\"Zero slippage\" means zero slippage FROM THE QUOTED PRICE, briefly held",
+      "detail": "The RFQ quote holds for a short window and fills at quoted price; it does not eliminate the spread between quote and index mid. CTO-confirmed. Cohort measurement: ~10 bps average per-side skew vs external reference.",
+      "agent_rule": "Benchmark fills against an independent external reference (not the venue mark) to measure true execution quality.",
+      "verified": "2026-05-12"
+    },
+    {
+      "id": "Q-EXEC-NOTIONAL-CAPS",
+      "category": "execution",
+      "severity": "caution",
+      "title": "Per-ticket notional caps vary 70k-4M USD by symbol; stated cap != quoted depth",
+      "detail": "max_notional_value ranges from $50k (thin tails) through $800k (mid caps) to $4M (majors, commodities). Whether a solver actually quotes the max on thin symbols is a hedger-depth question, not a registry guarantee.",
+      "agent_rule": "Read min/max_notional_value per symbol. For size above the cap, split across tickets and expect requote risk between fills. Probe realistic depth with small clips before committing size on thin symbols.",
+      "verified": "2026-07-10",
+      "verification_method": "registry sweep"
+    },
+    {
+      "id": "Q-API-SOLVER-REGISTRY",
+      "category": "api",
+      "severity": "info",
+      "title": "The solver contract-symbols endpoint is the venue's listings source of truth",
+      "detail": "659 symbols (2026-07-10), all valid + rfq_allowed. Public, keyless. Whether the UI suppresses any registry symbols client-side is unverified.",
+      "agent_rule": "Derive market lists, fees, leverage, and caps from this endpoint at runtime; date-stamp any cached copy.",
+      "verified": "2026-07-10"
+    },
+    {
+      "id": "Q-API-PROGRAMMATIC-FLOW",
+      "category": "api",
+      "severity": "breaking",
+      "title": "Programmatic order flow is not sanctioned on v1; agent flow raced the production hedger",
+      "detail": "Direct agent submission via the v1 path exposed backend timing vulnerabilities (May 2026) and the team requested a pause. v1 is not agent-safe for writes; v2 is the sanctioned agent path once its API relocates.",
+      "agent_rule": "Do not run autonomous order flow against v1. Read-only integration only, until the venue provides an agent-sanctioned path.",
+      "verified": "2026-05-11"
+    },
+    {
+      "id": "Q-SETTLE-TRANSITION",
+      "category": "settlement",
+      "severity": "info",
+      "title": "Multi-venue settlement layer is transitioning architectures",
+      "detail": "Current v1 settlement is Symmio-based on SEI; next protocol version moves multi-venue settlement to a different architecture. Use architecture-agnostic language and expect settlement-adjacent APIs to change.",
+      "agent_rule": "Do not couple tooling to Symmio-specific artifacts for forward-looking work; isolate settlement assumptions behind the venue adapter.",
+      "verified": "2026-06-01"
+    }
+  ]
+}

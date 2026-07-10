@@ -1,0 +1,92 @@
+{
+  "registry_version": 1,
+  "venue_id": "gryps-v2-polygon",
+  "venue_name": "Gryps/Orbs v2 PerpsRollup (Polygon PoS, TEE rollup)",
+  "chain": "polygon",
+  "as_of": "2026-07-10",
+  "sources": [
+    "Sourcify exact-match verified source (PerpsRollup.sol)",
+    "Polygonscan tx history + live eth_call probes 2026-07-10",
+    "v2 observability/test plan 2026-07-03",
+    "paper-runner reconciliation 2026-07-03"
+  ],
+  "quirks": [
+    {
+      "id": "Q-API-HOSTNAME-CHURN",
+      "category": "api",
+      "severity": "breaking",
+      "title": "Engine API hostname was deleted from DNS without notice (2026-07-10)",
+      "detail": "perpsapi.pol.orbs.network stopped resolving entirely (ENOTFOUND from multiple networks) while the engine kept running — state roots continued on-chain. The API surface relocates during the multichain rollout; the operator has stated the API will change substantially (dynamic fees, multivenue).",
+      "agent_rule": "Treat the engine base URL as configuration, never a constant. Monitor venue liveness from the chain (state-root cadence), not from API reachability. Pin an api version and diff schemas on a schedule.",
+      "verified": "2026-07-10",
+      "verification_method": "DNS resolution from 3 networks + on-chain state-root timestamps"
+    },
+    {
+      "id": "Q-AUTH-SESSION-KEYS",
+      "category": "auth",
+      "severity": "info",
+      "title": "Delegated trading via time-boxed session keys; agents cannot withdraw",
+      "detail": "SessionKeyRegistered(accountId, sessionKey, expiresAt) attests engine-side delegation. The delegated key signs orders to the engine; withdrawals execute only to TEE-attested recipients inside state-root operations. Registration flow is engine-side (no on-chain function); exact EIP-712 message pending venue documentation.",
+      "agent_rule": "Use a dedicated session key per agent deployment, never the account owner key. Track expiresAt and renew before expiry; treat authority as revocable at any time.",
+      "verified": "2026-07-10",
+      "verification_method": "verified contract source + event schema"
+    },
+    {
+      "id": "Q-SETTLE-TEE-TRUST",
+      "category": "settlement",
+      "severity": "caution",
+      "title": "TEE-trust rollup, not fraud-proof: the contract verifies signatures, not state transitions",
+      "detail": "updateStateRoot accepts any operation batch signed by a ROLLUP_MANAGER_ROLE key with correct root chaining and sequencing. Withdrawals execute on TEE attestation alone. Admin can upgrade the implementation (UUPS).",
+      "agent_rule": "Size venue exposure to TEE-operator trust, as with a CEX-grade counterparty. Monitor the EIP-1967 implementation slot for upgrades and Upgraded events; treat an unexpected implementation change as a withdraw-and-reassess signal.",
+      "verified": "2026-07-10",
+      "verification_method": "verified contract source read"
+    },
+    {
+      "id": "Q-ACCT-SCALING",
+      "category": "accounting",
+      "severity": "breaking",
+      "title": "Mixed fixed-point scaling: price 1e18, quantity 1e8, USDC 1e6",
+      "detail": "Engine API and event data use different scales per field. quantity is 1e8 fixed point regardless of the market's display quantityPrecision.",
+      "agent_rule": "Centralize scaling conversions in one codec module; property-test round-trips. Never infer scale from display precision fields.",
+      "verified": "2026-07-03"
+    },
+    {
+      "id": "Q-FEES-EVENTS-ITEMIZED",
+      "category": "fees",
+      "severity": "info",
+      "title": "Per-fill fee itemization is notarized on-chain; fee tiers are per-account events",
+      "detail": "OrderPlaced/TradeFilled events carry affiliateFee, platformFee, hedgerFee, lockedMMR, notional per fill. FeeTierSet(accountId, feeTier) changes an account's pricing. A flat 12 bps was observed in early testing; the operator has stated fees become dynamic — the events are the truth source.",
+      "agent_rule": "Reconcile realized costs from TradeFilled events rather than assuming a schedule. Watch FeeTierSet for your accountId; re-derive strategy viability when tier changes.",
+      "verified": "2026-07-10",
+      "verification_method": "verified event schema; fee values from testing are historical observations"
+    },
+    {
+      "id": "Q-INFRA-DEPOSIT-PERMISSIONLESS",
+      "category": "custody",
+      "severity": "info",
+      "title": "depositForAccount is permissionless — anyone can fund any accountId",
+      "detail": "Deposits enter a pending state and are accepted into the rollup via a TEE-attested Deposit operation. Third-party funding (operator treasury funding an agent account) is native.",
+      "agent_rule": "Verify deposit acceptance by watching for the attested Deposit event, not just the PendingDeposit from your own transaction.",
+      "verified": "2026-07-10"
+    },
+    {
+      "id": "Q-INFRA-DRIFT-SIGNALS-ONCHAIN",
+      "category": "infra",
+      "severity": "info",
+      "title": "The venue publishes its own config/schema change signals on-chain",
+      "detail": "ConfigSnapshot(configHash) and EventSchemasUpdated(schemasHash) events fire when engine configuration or event schemas change.",
+      "agent_rule": "Subscribe to both events; treat either as a mandatory re-sync of cached venue configuration before further trading decisions.",
+      "verified": "2026-07-10"
+    },
+    {
+      "id": "Q-INFRA-UPGRADE-REHEARSALS",
+      "category": "infra",
+      "severity": "caution",
+      "title": "Proxy upgrade calls may occur in bursts without net implementation change",
+      "detail": "Six upgradeToAndCall transactions on 2026-07-07 left the implementation slot unchanged — rehearsal or config re-initialization. Naive upgrade alerts will fire on non-events; slot-diff alerts will miss config-only calls.",
+      "agent_rule": "Alert on BOTH upgradeToAndCall transactions AND implementation-slot changes, as separate signals with separate severities.",
+      "verified": "2026-07-10",
+      "verification_method": "Polygonscan history + EIP-1967 slot read"
+    }
+  ]
+}

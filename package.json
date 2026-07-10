@@ -1,0 +1,23 @@
+{
+  "name": "@gryps/agent-mcp",
+  "version": "0.2.0",
+  "description": "Read-mode MCP server for Gryps venue state. Markets, fees-as-data, funding, open interest — behind a single venue adapter seam.",
+  "type": "module",
+  "bin": {
+    "gryps-agent-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5"
+  }
+}
