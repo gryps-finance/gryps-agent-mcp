@@ -2,7 +2,16 @@
   "name": "@gryps/agent-mcp",
   "version": "0.1.0-alpha.1",
   "description": "Public read-only MCP server for live Gryps v2 market and venue data.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gryps-finance/gryps-agent-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gryps-finance/gryps-agent-mcp/issues"
+  },
+  "homepage": "https://github.com/gryps-finance/gryps-agent-mcp#readme",
   "type": "module",
+  "sideEffects": false,
   "main": "dist/public.js",
   "types": "dist/public.d.ts",
   "exports": {

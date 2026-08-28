@@ -30,6 +30,7 @@ function validateEndpoint(raw: string, label: string): string {
   if (url.username || url.password) {
     throw new PublicMcpError('invalid_configuration', `${label} must not contain credentials.`)
   }
+  url.search = ''
   url.hash = ''
   return url.toString().replace(/\/$/, '')
 }

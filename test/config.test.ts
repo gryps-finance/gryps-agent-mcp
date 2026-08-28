@@ -17,6 +17,13 @@ test('accepts loopback HTTP for development', () => {
   assert.match(config.apiBase, /^http:\/\/127\.0\.0\.1/)
 })
 
+test('strips query strings and fragments from configured endpoints', () => {
+  const config = parseConfig([
+    '--api-base=https://example.test/api/v1?token=leaky#fragment',
+  ])
+  assert.equal(config.apiBase, 'https://example.test/api/v1')
+})
+
 test('rejects insecure remote HTTP and credential-bearing URLs', () => {
   for (const args of [
     ['--api-base=http://example.com/api/v1'],

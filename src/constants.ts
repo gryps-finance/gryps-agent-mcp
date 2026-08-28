@@ -17,6 +17,10 @@ export const DEFAULT_API_BASE = 'https://perps-api.orbs.network/api/v1'
 export const DEFAULT_HEALTH_URL = 'https://perps-api.orbs.network/health'
 export const DEFAULT_TIMEOUT_MS = 10_000
 export const DEFAULT_CACHE_TTL_MS = 10_000
+export const DEFAULT_RETRY_DELAY_MS = 250
+export const UPSTREAM_MAX_RETRIES = 1
+export const MAX_UPSTREAM_RESPONSE_BYTES = 5_000_000
+export const CACHE_MAX_ENTRIES = 32
 
 export const PRICE_SCALE = 1_000_000
 

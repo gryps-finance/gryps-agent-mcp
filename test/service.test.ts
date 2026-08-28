@@ -34,6 +34,53 @@ test('returns a typed market envelope with decoded price and risk', async () => 
   assert.equal(response.meta.readOnly, true)
 })
 
+test('reports ambiguity when one base asset lists on multiple quote markets', () => {
+  const twoQuotes = [
+    ...markets,
+    {
+      symbol: 'BTCUSDC',
+      baseAsset: 'BTC',
+      quoteAsset: 'USDC',
+      displayName: 'BTC/USDC',
+      pricePrecision: 2,
+      quantityPrecision: 3,
+    },
+  ]
+  assert.throws(
+    () => resolveMarket(twoQuotes, 'BTC'),
+    (error: unknown) => error instanceof PublicMcpError && error.code === 'ambiguous_symbol',
+  )
+})
+
+test('filters and paginates the market catalogue deterministically', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const first = await service.listMarkets({ limit: 1, offset: 0 })
+  assert.equal(first.data.total, 2)
+  assert.equal(first.data.markets.length, 1)
+  assert.equal(first.data.markets[0]?.symbol, 'BTCUSDT')
+
+  const second = await service.listMarkets({ limit: 1, offset: 1 })
+  assert.equal(second.data.markets[0]?.symbol, 'PUMPBTCUSDT')
+
+  const filtered = await service.listMarkets({ query: 'pump', limit: 50, offset: 0 })
+  assert.equal(filtered.data.total, 1)
+  assert.equal(filtered.data.markets[0]?.symbol, 'PUMPBTCUSDT')
+})
+
+test('states the limitation when no price record exists for a market', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({
+      config: testConfig,
+      fetcher: fixtureFetch({ '/api/v1/prices': { prices: [] } }),
+    }),
+  )
+  const response = await service.getMarket({ symbol: 'BTC' })
+  assert.equal(response.data.price, null)
+  assert.match(response.meta.limitations.join(' '), /No current price record/)
+})
+
 test('labels fee basis and spread limitation explicitly', async () => {
   const service = new PublicReadService(
     new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),

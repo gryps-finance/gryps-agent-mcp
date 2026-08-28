@@ -47,6 +47,17 @@ test('maps all four live account-read contracts', async () => {
   assert.equal(trades.total, 0)
 })
 
+test('clamps pagination bounds before they reach the upstream URL', async () => {
+  const requested: string[] = []
+  const recordingFetcher: typeof fetch = async (input, init) => {
+    requested.push(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url)
+    return fetcher(input, init)
+  }
+  const client = new AccountReadClient(config, recordingFetcher)
+  await client.orders(10_000, -5)
+  assert.match(requested[0] ?? '', /limit=100&offset=0$/)
+})
+
 test('observer discovery is fixed to account reads and contains no write tool', () => {
   assert.deepEqual([...INTERNAL_OBSERVER_TOOLS], [
     'gryps_account_snapshot',

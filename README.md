@@ -69,6 +69,12 @@ npx -y @gryps/agent-mcp@alpha \
 ```
 
 Only HTTPS endpoints are accepted, except for loopback development addresses.
+Query strings and fragments are stripped from configured endpoints. `--help`
+and `--version` print usage and identity without starting the server.
+
+Upstream reads are cached briefly, deduplicated in flight, retried once on
+transient failures (network errors, HTTP 429/5xx), and rejected when a
+response body exceeds 5 MB.
 
 ## Architecture and execution upgrade
 
@@ -90,10 +96,17 @@ npm run smoke:live
 inspects the npm tarball allowlist. `smoke:live` separately verifies the current
 public endpoint because it requires network access.
 
+Continuous integration runs the same verification chain on Linux and Windows,
+plus a nightly live-contract check against the public endpoint to detect
+upstream API drift.
+
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the capability split,
 [BACKEND-INTEGRATION.md](BACKEND-INTEGRATION.md) for the verified backend map,
-[RELEASE.md](RELEASE.md) for the publication gate, and
-[SECURITY.md](SECURITY.md) for the defensive boundary and reporting path.
+[RELEASE.md](RELEASE.md) for the publication gate,
+[SECURITY.md](SECURITY.md) for the defensive boundary and reporting path,
+[CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and ground rules, and
+[ROADMAP.md](ROADMAP.md) for the path from public read to supervised agentic
+trading.
 
 ## Gryps-owned account observer
 

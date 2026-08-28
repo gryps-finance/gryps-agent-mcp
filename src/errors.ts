@@ -10,12 +10,16 @@ export type PublicErrorCode =
   | 'internal_error'
 
 export class PublicMcpError extends Error {
+  readonly retryable: boolean
+
   constructor(
     readonly code: PublicErrorCode,
     message: string,
+    options?: { retryable?: boolean },
   ) {
     super(message)
     this.name = 'PublicMcpError'
+    this.retryable = options?.retryable ?? false
   }
 }
 
