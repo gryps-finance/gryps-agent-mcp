@@ -78,10 +78,19 @@ jobs:
 
       - name: Publish (dry run)
         if: github.event_name == 'workflow_dispatch' && inputs.dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --dry-run --tag "${{ inputs.dist-tag }}"
 
       - name: Publish
         if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry-run)
+        # Auth is either OIDC trusted publishing (no secret needed) or, for the
+        # very first publish before the package exists on npm, a granular token
+        # in the NPM_TOKEN secret. Provenance is produced either way: it depends
+        # on running here on a cloud runner from a public repo, not on how we
+        # authenticated. Delete the secret once trusted publishing is configured.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --tag "${{ github.event_name == 'release' && 'alpha' || inputs.dist-tag }}"
 
       - name: Verify the published package installs and starts

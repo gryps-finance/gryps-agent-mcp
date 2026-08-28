@@ -46,13 +46,30 @@ repository. Because `publishConfig.provenance` is `true`, a local
 `.github/workflows/publish.yml` using npm trusted publishing (OIDC), so no npm
 token is stored in this repository.
 
-### One-time setup on npmjs.com
+### The first publish needs a token, later ones do not
 
-1. Create the package placeholder or publish once the trusted publisher exists.
-2. Open the package settings, find **Trusted Publisher**, choose **GitHub Actions**.
-3. Set organisation `gryps-finance`, repository `gryps-agent-mcp`, workflow
-   filename `publish.yml`.
-4. Allow the `npm publish` action.
+npm attaches a trusted publisher to an existing package, so the setting cannot
+be configured before the package exists. The npm interface tends to redirect
+that attempt into creating a Team, which is not what is needed.
+
+Break the loop by authenticating the first publish with a token. Provenance is
+still produced, because provenance depends on running on a cloud runner from a
+public repository, not on how the publish authenticated.
+
+1. On npmjs.com create a **Granular Access Token**, scoped to the
+   `gryps.finance` organisation with **Read and write** packages permission and
+   a short expiry.
+2. In this repository add it as the Actions secret `NPM_TOKEN`
+   (Settings, Secrets and variables, Actions).
+3. Run the Publish workflow with `dry-run` unchecked. The package now exists.
+4. On npmjs.com open the package settings, find **Trusted Publisher**, choose
+   **GitHub Actions**, and set organisation `gryps-finance`, repository
+   `gryps-agent-mcp`, workflow filename `publish.yml`. Allow `npm publish`.
+5. **Delete the `NPM_TOKEN` secret and revoke the token.** Every later release
+   authenticates over OIDC with no stored credential.
+
+The workflow supports both paths with no edits: it uses the token when the
+secret is present and OIDC when it is not.
 
 ### Running a release
 
