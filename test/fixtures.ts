@@ -5,6 +5,24 @@ export const testConfig: PublicMcpConfig = {
   healthUrl: 'https://example.test/health',
   timeoutMs: 1_000,
   cacheTtlMs: 10_000,
+  comparisonUrl: 'https://book.example.test/info',
+  comparisonTakerFeeBps: 4.5,
+  feeIsRoundTrip: false,
+  spreadBpsPerSide: undefined,
+}
+
+/** A minimal two-level order book for the comparison venue. */
+export const comparisonBook = {
+  levels: [
+    [
+      { px: '79600', sz: '5' },
+      { px: '79500', sz: '50' },
+    ],
+    [
+      { px: '79650', sz: '5' },
+      { px: '79750', sz: '50' },
+    ],
+  ],
 }
 
 export const fixtureBodies: Record<string, unknown> = {

@@ -19,7 +19,19 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 - [x] `--help` / `--version` CLI flags and graceful SIGINT/SIGTERM shutdown.
 - [x] End-to-end MCP wire tests over an in-memory transport.
 - [x] CI on Linux and Windows with the full release verification chain.
+- [x] Measured friction floor with provenance and explicit lower-bound status.
+- [x] Cost gating of a claimed edge, source-agnostic, with untrusted-signal notice.
+- [x] Correlation-floored signal stacking.
+- [x] Venue cost comparison by live book walk, including depth-exhaustion honesty.
+- [x] Market-count claim gated behind an unreconciled flag.
 - [ ] MCP `outputSchema` on every tool so clients can validate structured content.
+- [ ] `gryps_paper_session`: paper rehearsal of a mandate. Deferred from the
+      0.2 consolidation because it needs a price-stream contract first.
+- [ ] `gryps_prompt_library`: the open prompt manifest. Deferred pending the
+      entitlement split between open and paid prompts.
+- [ ] Measure spread on v2 so the friction floor stops being a lower bound.
+      This is the single highest-value open item: it converts the headline
+      number from a fee floor into all-in friction.
 - [ ] Structured stderr logging with `--log-level` (never stdout; stdio transport owns stdout).
 - [ ] Request correlation IDs threaded through envelopes and logs.
 - [ ] Circuit breaker + stale-while-revalidate cache so a flapping upstream degrades gracefully.

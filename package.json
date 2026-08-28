@@ -1,7 +1,7 @@
 {
   "name": "@gryps/agent-mcp",
-  "version": "0.1.0-alpha.1",
-  "description": "Public read-only MCP server for live Gryps v2 market and venue data.",
+  "version": "0.2.0-alpha.1",
+  "description": "MCP server that checks whether a trading signal can survive execution reality. Live Gryps v2 venue data, measured friction floor, and cost gating. Read-only.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gryps-finance/gryps-agent-mcp.git"
@@ -67,7 +67,11 @@
     "model-context-protocol",
     "trading",
     "market-data",
-    "read-only"
+    "read-only",
+    "execution-cost",
+    "friction",
+    "perpetuals",
+    "agent"
   ],
   "license": "MIT",
   "dependencies": {

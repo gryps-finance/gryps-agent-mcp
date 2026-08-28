@@ -19,12 +19,21 @@ runtimes can reuse the same read contract without copying endpoint logic.
 
 ## Capability profiles
 
-### Public read
+### Public read and decision support
 
 - Market catalogue
 - Exact market detail and current price
 - Engine-reported fee schedule
 - Venue health and settlement identity
+- Measured friction floor with provenance and lower-bound honesty
+- Cost gating of a claimed edge from any upstream signal source
+- Correlation-floored combination of stacked signals
+- Venue cost comparison against a public order book
+
+The decision-support tools are pure computation over live read data. They hold
+no state, no account context, and no authority. They are in the public package
+because refusing a bad trade is the product, and a refusal is worth nothing if
+the user has to be trusted to run it.
 
 ### Internal observe
 
@@ -47,7 +56,12 @@ of the public package.
 
 ## Invariants
 
-- The public tool list is frozen and tested.
+- The public tool list is frozen and tested. Changing it is a product decision
+  and requires the allowlist test to be updated deliberately.
+- Internal strategy surfaces (lead-lag, backtest harness, research runners) are
+  absent from the public package and asserted absent by test.
+- Friction is never a constant. It is read live, carries provenance, and
+  declares itself a lower bound whenever a component is unmeasured.
 - Public responses never include environment, filesystem, credential, account,
   internal strategy, or private repository details.
 - Symbol resolution uses exact canonical, display, or unique base-asset matches.

@@ -24,11 +24,29 @@ export const CACHE_MAX_ENTRIES = 32
 
 export const PRICE_SCALE = 1_000_000
 
+/**
+ * Public order-book venue used for cost comparison. Keyless and read-only.
+ * Comparison is opt-out so the router can always answer "is Gryps actually
+ * the cheaper route", including when the answer is no.
+ */
+export const DEFAULT_COMPARISON_URL = 'https://api.hyperliquid.xyz/info'
+
+/**
+ * Taker fee assumed for the comparison venue, per leg, in basis points. This is
+ * an assumption, not a measurement: it is tier-dependent and changes. It is
+ * overridable and every response states the value used.
+ */
+export const DEFAULT_COMPARISON_TAKER_FEE_BPS = 4.5
+
 export const PUBLIC_TOOL_NAMES = [
   'gryps_list_markets',
   'gryps_get_market',
-  'gryps_get_fee_schedule',
   'gryps_venue_status',
+  'gryps_friction_floor',
+  'gryps_get_fee_schedule',
+  'gryps_edge_check',
+  'gryps_signal_stack',
+  'gryps_route_compare',
 ] as const
 
 export type PublicToolName = (typeof PUBLIC_TOOL_NAMES)[number]

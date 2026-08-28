@@ -16,9 +16,20 @@ test('public tool allowlist is frozen', () => {
   assert.deepEqual([...PUBLIC_TOOL_NAMES], [
     'gryps_list_markets',
     'gryps_get_market',
-    'gryps_get_fee_schedule',
     'gryps_venue_status',
+    'gryps_friction_floor',
+    'gryps_get_fee_schedule',
+    'gryps_edge_check',
+    'gryps_signal_stack',
+    'gryps_route_compare',
   ])
+})
+
+test('no internal strategy surface reaches the public allowlist', () => {
+  const joined = PUBLIC_TOOL_NAMES.join(' ')
+  for (const forbidden of [/leadlag/i, /lead_lag/i, /slipstream/i, /backtest/i, /account/i, /wallet/i]) {
+    assert.doesNotMatch(joined, forbidden)
+  }
 })
 
 test('runtime identity is sourced from package metadata', () => {

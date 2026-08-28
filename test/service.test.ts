@@ -78,7 +78,19 @@ test('states the limitation when no price record exists for a market', async () 
   )
   const response = await service.getMarket({ symbol: 'BTC' })
   assert.equal(response.data.price, null)
-  assert.match(response.meta.limitations.join(' '), /No current price record/)
+  assert.equal(response.data.priceStatus, 'PRICE_UNAVAILABLE')
+  assert.match(response.meta.limitations.join(' '), /no current price record/i)
+})
+
+test('venue status flags the market count as unreconciled and unpublishable', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.venueStatus()
+  assert.equal(response.data.catalogue.engineReportedMarketCount, 2)
+  assert.equal(response.data.catalogue.reconciledWithDocumentation, false)
+  assert.equal(response.data.catalogue.publishableAsClaim, false)
+  assert.match(response.meta.limitations.join(' '), /must not be repeated as a public claim/)
 })
 
 test('labels fee basis and spread limitation explicitly', async () => {

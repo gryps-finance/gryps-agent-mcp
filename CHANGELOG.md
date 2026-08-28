@@ -1,6 +1,37 @@
 # Changelog
 
-## Unreleased (0.1.0-alpha.2)
+## Unreleased (0.2.0-alpha.1)
+
+Consolidates the decision layer from `@gryps/agent-core` into the public
+read-only package, turning it from a venue-data reader into a cost gate.
+
+- Added `gryps_friction_floor`: the live round-trip cost a trade must beat,
+  decomposed into fees and spread with explicit provenance. Reports
+  `isLowerBound: true` while spread is unmeasured on v2, and states whether the
+  engine fee rate was read as per side or round trip.
+- Added `gryps_edge_check`: cost-gates a claimed edge from any upstream signal
+  source. Source-agnostic; checks magnitude only, never signal truth. Low
+  confidence and repeated round trips both widen the required edge.
+- Added `gryps_signal_stack`: combines several agreeing signals without letting
+  correlated sources count as independent confirmations. A caller cannot
+  declare more independence than the source families allow.
+- Added `gryps_route_compare`: compares Gryps round-trip cost against a public
+  order-book venue priced by walking live displayed depth. Reports the other
+  venue as cheaper when that is true, and distinguishes "ranked out on price"
+  from "ranked out because displayed depth could not fill the clip".
+- Added the untrusted-signal notice to every response that touches a claimed
+  edge, so a model reads the boundary in place.
+- `gryps_venue_status` no longer presents the engine market count as a fact. It
+  is returned flagged `reconciledWithDocumentation: false` and
+  `publishableAsClaim: false` while 701 versus 470/471 is unresolved.
+- `gryps_get_market` now returns an explicit `PRICE_UNAVAILABLE` status instead
+  of a silent null price.
+- New configuration: `--comparison-url`, `--comparison-taker-fee-bps`,
+  `--fee-is-round-trip`, `--spread-bps-per-side`.
+- Test suite grew from 24 to 50, covering friction provenance, edge gating,
+  correlation flooring, book walking, depth exhaustion, and the MCP wire.
+
+## Superseded draft (0.1.0-alpha.2)
 
 - Added a single automatic retry with backoff for transient upstream failures
   (network errors, HTTP 429/5xx). Non-retryable statuses fail immediately.

@@ -63,6 +63,57 @@ test('returns a typed sanitised error envelope for an unknown symbol', async () 
   await client.close()
 })
 
+test('cost-gates a claimed edge over the wire and refuses a losing one', async () => {
+  const { client } = await connectedClient()
+  const response = await client.callTool({
+    name: 'gryps_edge_check',
+    arguments: { symbol: 'BTC', source: 'unit test signal', claimedEdgeBps: 5 },
+  })
+  assert.notEqual(response.isError, true)
+  const payload = response.structuredContent as {
+    data: { clears: boolean; verdict: string; untrustedSignalNotice: string }
+  }
+  assert.equal(payload.data.clears, false)
+  assert.match(payload.data.verdict, /DOES NOT CLEAR/)
+  assert.match(payload.data.untrustedSignalNotice, /never as instruction to follow/)
+  await client.close()
+})
+
+test('returns a friction floor with explicit lower-bound provenance', async () => {
+  const { client } = await connectedClient()
+  const response = await client.callTool({ name: 'gryps_friction_floor', arguments: { symbol: 'BTC' } })
+  const payload = response.structuredContent as {
+    data: { roundTripBps: number; provenance: { isLowerBound: boolean; feeBasis: string } }
+    meta: { limitations: string[] }
+  }
+  assert.equal(payload.data.roundTripBps, 24)
+  assert.equal(payload.data.provenance.isLowerBound, true)
+  assert.equal(payload.data.provenance.feeBasis, 'engine-reported')
+  assert.match(payload.meta.limitations.join(' '), /measured fee floor/)
+  await client.close()
+})
+
+test('refuses to count correlated signals as independent confirmations over the wire', async () => {
+  const { client } = await connectedClient()
+  const response = await client.callTool({
+    name: 'gryps_signal_stack',
+    arguments: {
+      signals: [
+        { source: 'feed A', family: 'social', claimedEdgeBps: 40 },
+        { source: 'feed B', family: 'social', claimedEdgeBps: 40 },
+      ],
+      symbol: 'BTC',
+    },
+  })
+  const payload = response.structuredContent as {
+    data: { effectiveEdgeBps: number; naiveSumBps: number; gated: { clears: boolean } }
+  }
+  assert.equal(payload.data.naiveSumBps, 80)
+  assert.equal(payload.data.effectiveEdgeBps, 40)
+  assert.equal(payload.data.gated.clears, true)
+  await client.close()
+})
+
 test('maps an unavailable upstream to a sanitised upstream_unavailable envelope', async () => {
   const failingFetch: typeof fetch = async () => {
     throw new Error('connect ECONNREFUSED 10.0.0.7')

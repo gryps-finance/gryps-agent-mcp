@@ -1,6 +1,15 @@
 import { PRICE_SCALE, RESPONSE_SCHEMA_VERSION } from './constants.js'
 import { EngineReadClient } from './client.js'
 import { PublicMcpError } from './errors.js'
+import { FrictionService, type FrictionSample } from './friction.js'
+import {
+  UNTRUSTED_SIGNAL_NOTICE,
+  checkEdge,
+  breakEvenEdgeBps,
+  combineSignals,
+  type StackedSignal,
+} from './analysis.js'
+import { ComparisonVenue, compareRoutes, type VenueQuote } from './router.js'
 import type { MarketRecord } from './schemas.js'
 
 interface EnvelopeMeta {
@@ -58,8 +67,40 @@ export function resolveMarket(markets: MarketRecord[], requested: string): Marke
   )
 }
 
+export interface PublicReadServiceOptions {
+  comparisonUrl?: string | null
+  comparisonTakerFeeBps?: number
+  feeIsRoundTrip?: boolean
+  spreadBpsPerSide?: number | undefined
+  timeoutMs?: number
+  fetcher?: typeof fetch
+}
+
 export class PublicReadService {
-  constructor(private readonly client: EngineReadClient) {}
+  private readonly friction: FrictionService
+  private readonly comparison: ComparisonVenue | null
+
+  constructor(
+    private readonly client: EngineReadClient,
+    private readonly options: PublicReadServiceOptions = {},
+  ) {
+    this.friction = new FrictionService(client, {
+      ...(options.feeIsRoundTrip === undefined ? {} : { feeIsRoundTrip: options.feeIsRoundTrip }),
+      ...(options.spreadBpsPerSide === undefined ? {} : { spreadBpsPerSide: options.spreadBpsPerSide }),
+    })
+    this.comparison = options.comparisonUrl
+      ? new ComparisonVenue({
+          apiUrl: options.comparisonUrl,
+          takerFeeBpsPerLeg: options.comparisonTakerFeeBps ?? 0,
+          timeoutMs: options.timeoutMs ?? 10_000,
+          ...(options.fetcher ? { fetcher: options.fetcher } : {}),
+        })
+      : null
+  }
+
+  private async resolveSymbol(symbol: string): Promise<MarketRecord> {
+    return resolveMarket(await this.client.markets(), symbol)
+  }
 
   async listMarkets(input: { query?: string; limit: number; offset: number }) {
     const markets = (await this.client.markets()).slice().sort((a, b) => a.symbol.localeCompare(b.symbol))
@@ -101,11 +142,9 @@ export class PublicReadService {
               observedAt: new Date(price.timestamp).toISOString(),
             }
           : null,
+        priceStatus: price ? 'available' : 'PRICE_UNAVAILABLE',
         risk: marketRisk
-          ? {
-              defaultLeverage: marketRisk.defaultLeverage,
-              maxLeverage: marketRisk.maxLeverage,
-            }
+          ? { defaultLeverage: marketRisk.defaultLeverage, maxLeverage: marketRisk.maxLeverage }
           : null,
       },
       [
@@ -114,7 +153,11 @@ export class PublicReadService {
         `${this.client.apiSource}/risk-config`,
       ],
       [
-        ...(price ? [] : ['No current price record was returned for this canonical symbol.']),
+        ...(price
+          ? []
+          : [
+              'The engine listed this market but returned no current price record. The market is real; the price is unavailable, not zero.',
+            ]),
         ...(marketRisk ? [] : ['No risk configuration was returned for this canonical symbol.']),
         'Price is decoded from the engine 1e6 fixed-point representation.',
       ],
@@ -129,13 +172,134 @@ export class PublicReadService {
         tiers,
         unit: 'basis_points',
         field: 'totalFeeRateBps',
-        feeBasisStatus: 'unverified_per_side_or_round_trip',
+        feeBasisStatus: this.options.feeIsRoundTrip ? 'confirmed_round_trip' : 'unverified_per_side_or_round_trip',
       },
       [`${this.client.apiSource}/risk-config`],
       [
         'Values are reported exactly as supplied by the v2 engine.',
-        'Whether totalFeeRateBps is per side or round trip remains unverified in this alpha.',
+        ...(this.options.feeIsRoundTrip
+          ? []
+          : ['Whether totalFeeRateBps is per side or round trip remains unverified.']),
         'Spread is not included and must not be inferred from this schedule.',
+        'Use gryps_friction_floor for the number a trade actually has to beat.',
+      ],
+    )
+  }
+
+  async frictionFloor(input: { symbol: string }) {
+    const market = await this.resolveSymbol(input.symbol)
+    const sample = await this.friction.sample(market.symbol)
+    return envelope(
+      {
+        symbol: market.symbol,
+        roundTripBps: sample.quote.roundTripBps,
+        breakEvenEdgeBps: breakEvenEdgeBps(sample.quote),
+        components: {
+          protocolFeeBps: sample.quote.protocolFeeBps,
+          openSpreadBps: sample.quote.openSpreadBps,
+          closeSpreadBps: sample.quote.closeSpreadBps,
+        },
+        provenance: {
+          feeBasis: sample.feeBasis,
+          spreadBasis: sample.spreadBasis,
+          tierLevel: sample.tierLevel,
+          isLowerBound: sample.isLowerBound,
+          note: sample.basisNote,
+        },
+        measuredAt: sample.quote.measuredAtIso,
+      },
+      [`${this.client.apiSource}/risk-config`],
+      sample.limitations,
+    )
+  }
+
+  async edgeCheck(input: {
+    symbol: string
+    source: string
+    claimedEdgeBps: number
+    confidence?: number | undefined
+    expectedRoundTrips?: number | undefined
+    convictionMultiple?: number | undefined
+  }) {
+    const market = await this.resolveSymbol(input.symbol)
+    const sample = await this.friction.sample(market.symbol)
+    const result = checkEdge(
+      { ...input, symbol: market.symbol },
+      sample.quote,
+      input.convictionMultiple === undefined ? {} : { convictionMultiple: input.convictionMultiple },
+    )
+    return envelope(
+      { ...result, untrustedSignalNotice: UNTRUSTED_SIGNAL_NOTICE, frictionProvenance: sample.basisNote },
+      [`${this.client.apiSource}/risk-config`],
+      [
+        ...sample.limitations,
+        ...(sample.isLowerBound
+          ? ['Friction is a lower bound, so a claim that barely clears here may not clear in reality.']
+          : []),
+      ],
+    )
+  }
+
+  async signalStack(input: {
+    signals: StackedSignal[]
+    assumedCorrelation?: number | undefined
+    symbol?: string | undefined
+  }) {
+    const result = combineSignals(
+      input.signals,
+      input.assumedCorrelation === undefined ? {} : { assumedCorrelation: input.assumedCorrelation },
+    )
+
+    if (!input.symbol) {
+      return envelope({ ...result, untrustedSignalNotice: UNTRUSTED_SIGNAL_NOTICE, gated: null }, [], [
+        'No symbol was supplied, so the combined edge was not checked against live friction.',
+      ])
+    }
+
+    const market = await this.resolveSymbol(input.symbol)
+    const sample = await this.friction.sample(market.symbol)
+    const gate = checkEdge(
+      {
+        symbol: market.symbol,
+        source: `stacked:${result.distinctFamilies.join('+')}`,
+        claimedEdgeBps: result.effectiveEdgeBps,
+      },
+      sample.quote,
+    )
+    return envelope(
+      { ...result, untrustedSignalNotice: UNTRUSTED_SIGNAL_NOTICE, gated: gate },
+      [`${this.client.apiSource}/risk-config`],
+      sample.limitations,
+    )
+  }
+
+  async routeCompare(input: { symbol: string; side: 'long' | 'short'; notionalUsd: number }) {
+    const market = await this.resolveSymbol(input.symbol)
+    const sample = await this.friction.sample(market.symbol)
+
+    const comparisonQuote: VenueQuote = this.comparison
+      ? await this.comparison.quote(market.symbol, input.side, input.notionalUsd)
+      : {
+          venueId: 'comparison-disabled',
+          allInBps: null,
+          fixedCost: false,
+          eligible: false,
+          note: 'Venue comparison is disabled in this server configuration.',
+        }
+
+    const comparison = compareRoutes(market.symbol, input.side, input.notionalUsd, sample, comparisonQuote)
+    return envelope(
+      {
+        ...comparison,
+        comparisonTakerFeeBpsAssumed: this.options.comparisonTakerFeeBps ?? null,
+      },
+      [
+        `${this.client.apiSource}/risk-config`,
+        ...(this.options.comparisonUrl ? [this.options.comparisonUrl] : []),
+      ],
+      [
+        ...comparison.caveats,
+        'The comparison venue taker fee is an assumption supplied by configuration, not a measurement.',
       ],
     )
   }
@@ -158,10 +322,17 @@ export class PublicReadService {
           chainId: config.chainId,
           contract: config.contractAddress ?? config.contract ?? null,
         },
-        listedMarkets: markets.length,
+        catalogue: {
+          engineReportedMarketCount: markets.length,
+          reconciledWithDocumentation: false,
+          publishableAsClaim: false,
+        },
       },
       [this.client.healthSource, `${this.client.apiSource}/config`, `${this.client.apiSource}/markets`],
-      ['Listed market count does not prove quote availability or trading readiness.'],
+      [
+        'The engine-reported market count has not been reconciled with published Gryps documentation and must not be repeated as a public claim.',
+        'A listed market count does not prove quote availability or trading readiness.',
+      ],
     )
   }
 }

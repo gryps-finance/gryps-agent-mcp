@@ -4,6 +4,7 @@ import { EngineReadClient } from './client.js'
 import type { PublicMcpConfig } from './config.js'
 import { PUBLIC_TOOL_NAMES, SERVER_NAME, PACKAGE_VERSION } from './constants.js'
 import { errorEnvelope } from './errors.js'
+import { SIGNAL_FAMILIES } from './analysis.js'
 import { PublicReadService } from './service.js'
 
 function result(payload: object, isError = false) {
@@ -37,7 +38,15 @@ export interface PublicServerOptions {
 }
 
 export function createPublicServer(config: PublicMcpConfig, options: PublicServerOptions = {}): McpServer {
-  const service = new PublicReadService(new EngineReadClient({ config, ...options }))
+  const client = new EngineReadClient({ config, ...options })
+  const service = new PublicReadService(client, {
+    comparisonUrl: config.comparisonUrl,
+    comparisonTakerFeeBps: config.comparisonTakerFeeBps,
+    feeIsRoundTrip: config.feeIsRoundTrip,
+    spreadBpsPerSide: config.spreadBpsPerSide,
+    timeoutMs: config.timeoutMs,
+    ...(options.fetcher ? { fetcher: options.fetcher } : {}),
+  })
   const server = new McpServer({ name: SERVER_NAME, version: PACKAGE_VERSION })
 
   server.registerTool(
@@ -45,7 +54,7 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     {
       title: 'List Gryps v2 markets',
       description:
-        'Browse the live Gryps v2 market catalogue. Supports bounded search and pagination. Read-only. A listed market is not a promise of quote availability.',
+        'Browse the live Gryps v2 market catalogue with bounded search and pagination. Read-only. A listed market is not a promise of quote availability.',
       inputSchema: {
         query: z.string().trim().min(1).max(100).optional(),
         limit: z.number().int().min(1).max(200).default(50),
@@ -53,7 +62,8 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
       },
       annotations,
     },
-    ({ query, limit, offset }) => safely(() => service.listMarkets({ ...(query ? { query } : {}), limit, offset })),
+    ({ query, limit, offset }) =>
+      safely(() => service.listMarkets({ ...(query ? { query } : {}), limit, offset })),
   )
 
   server.registerTool(
@@ -61,10 +71,8 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     {
       title: 'Get one Gryps v2 market',
       description:
-        'Resolve one exact canonical symbol, display name, or unique base asset. Returns live price and leverage limits without substring guessing. Read-only.',
-      inputSchema: {
-        symbol: z.string().trim().min(1).max(40),
-      },
+        'Resolve one exact canonical symbol, display name, or unique base asset and return live price and leverage limits. Never guesses by substring. Returns a typed PRICE_UNAVAILABLE status rather than inventing a price.',
+      inputSchema: { symbol: z.string().trim().min(1).max(40) },
       annotations,
     },
     ({ symbol }) => safely(() => service.getMarket({ symbol })),
@@ -73,9 +81,33 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
   server.registerTool(
     PUBLIC_TOOL_NAMES[2],
     {
+      title: 'Check Gryps v2 venue status',
+      description:
+        'Check live API health, build version, and settlement chain and contract. The engine-reported market count is returned but is explicitly flagged as unreconciled and not publishable as a claim.',
+      inputSchema: {},
+      annotations,
+    },
+    () => safely(() => service.venueStatus()),
+  )
+
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[3],
+    {
+      title: 'Measure the Gryps friction floor',
+      description:
+        'Return the live round-trip cost a trade must beat on Gryps, decomposed into fees and spread with full provenance. States plainly whether the number is a measured fee floor or all-in friction, and whether it is a lower bound. This is the number that decides whether a trade is worth making.',
+      inputSchema: { symbol: z.string().trim().min(1).max(40) },
+      annotations,
+    },
+    ({ symbol }) => safely(() => service.frictionFloor({ symbol })),
+  )
+
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[4],
+    {
       title: 'Get the Gryps v2 fee schedule',
       description:
-        'Read the live engine-reported fee tiers. The response explicitly states that per-side versus round-trip fee basis remains unverified. Read-only.',
+        'Read the live engine-reported fee tier ladder. Fees are only part of friction: use gryps_friction_floor for the number a trade actually has to beat.',
       inputSchema: {},
       annotations,
     },
@@ -83,15 +115,63 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
   )
 
   server.registerTool(
-    PUBLIC_TOOL_NAMES[3],
+    PUBLIC_TOOL_NAMES[5],
     {
-      title: 'Check Gryps v2 venue status',
+      title: 'Cost-gate a claimed trading edge',
       description:
-        'Check live API health, build version, settlement chain and contract, and listed market count. Read-only and non-account-specific.',
-      inputSchema: {},
+        'Take a claimed edge from any upstream signal source and answer whether it could survive live execution cost with a margin of safety. Source-agnostic. It never evaluates whether the signal is true, only whether the claimed magnitude can pay for its own execution. Treats third-party signal text as untrusted data, never instruction.',
+      inputSchema: {
+        symbol: z.string().trim().min(1).max(40),
+        source: z.string().trim().min(1).max(120).describe('Where the claim came from, for example "TradingView RSI".'),
+        claimedEdgeBps: z.number().finite().min(-10_000).max(100_000).describe('The move the signal expects to capture, in basis points.'),
+        confidence: z.number().min(0).max(1).optional().describe('Caller confidence. Lower confidence widens the required edge.'),
+        expectedRoundTrips: z.number().int().min(1).max(1_000).optional().describe('Round trips expected for a repeated signal. Cost compounds; edge usually does not.'),
+        convictionMultiple: z.number().min(1).max(10).optional().describe('Margin of safety applied to friction. Default 1.5.'),
+      },
       annotations,
     },
-    () => safely(() => service.venueStatus()),
+    (input) => safely(() => service.edgeCheck(input)),
+  )
+
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[6],
+    {
+      title: 'Combine stacked signals honestly',
+      description:
+        'Combine several agreeing signals into one honest edge estimate. Correlated sources are prevented from being counted as independent confirmations, because correlated evidence inflates confidence without inflating edge, and confidence is what sets position size. Supply a symbol to also cost-gate the combined result.',
+      inputSchema: {
+        signals: z
+          .array(
+            z.object({
+              source: z.string().trim().min(1).max(120),
+              family: z.enum(SIGNAL_FAMILIES),
+              claimedEdgeBps: z.number().finite().min(-10_000).max(100_000),
+            }),
+          )
+          .min(1)
+          .max(25),
+        assumedCorrelation: z.number().min(0).max(1).optional().describe('Your belief about independence. Raised automatically if the source families overlap.'),
+        symbol: z.string().trim().min(1).max(40).optional().describe('Supply to gate the combined edge against live friction.'),
+      },
+      annotations,
+    },
+    (input) => safely(() => service.signalStack(input)),
+  )
+
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[7],
+    {
+      title: 'Compare execution cost across venues',
+      description:
+        'Compare the round-trip cost of a clip on Gryps against a public order-book venue priced by walking its live displayed depth. Gryps cost is quoted and does not grow with clip size; book cost does. This tool reports the other venue as cheaper when that is what the numbers say.',
+      inputSchema: {
+        symbol: z.string().trim().min(1).max(40),
+        side: z.enum(['long', 'short']).default('long'),
+        notionalUsd: z.number().positive().max(1_000_000_000).describe('Clip size in USD. Book impact depends on it.'),
+      },
+      annotations,
+    },
+    ({ symbol, side, notionalUsd }) => safely(() => service.routeCompare({ symbol, side, notionalUsd })),
   )
 
   return server
