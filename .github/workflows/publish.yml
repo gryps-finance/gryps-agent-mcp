@@ -1,12 +1,15 @@
 name: Publish
 
-# Publishing happens here, never from a laptop. npm only accepts provenance
-# generated on a cloud runner from a public repository, so a local publish with
-# provenance enabled fails by design.
+# Every release after the first runs here.
+#
+# Provenance is requested with an explicit --provenance flag rather than
+# publishConfig, because npm only accepts provenance generated on a cloud runner
+# from a public repository. Keeping it out of package.json means the very first
+# publish can still be done locally to create the package, which is what npm
+# trusted publishing needs before it can be configured.
 #
 # Authentication is npm trusted publishing (OIDC). No npm token is stored in
-# this repository. The trusted publisher must be configured once on npmjs.com
-# against this repository and this workflow filename.
+# this repository once that is set up.
 
 on:
   workflow_dispatch:
@@ -84,14 +87,12 @@ jobs:
 
       - name: Publish
         if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry-run)
-        # Auth is either OIDC trusted publishing (no secret needed) or, for the
-        # very first publish before the package exists on npm, a granular token
-        # in the NPM_TOKEN secret. Provenance is produced either way: it depends
-        # on running here on a cloud runner from a public repo, not on how we
-        # authenticated. Delete the secret once trusted publishing is configured.
+        # Normally authenticates over OIDC with no stored secret. NODE_AUTH_TOKEN
+        # is only honoured if an NPM_TOKEN secret exists, which is a fallback and
+        # should be removed once trusted publishing is configured.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --tag "${{ github.event_name == 'release' && 'alpha' || inputs.dist-tag }}"
+        run: npm publish --provenance --tag "${{ github.event_name == 'release' && 'alpha' || inputs.dist-tag }}"
 
       - name: Verify the published package installs and starts
         if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry-run)

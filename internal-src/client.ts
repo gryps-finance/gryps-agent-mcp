@@ -79,7 +79,7 @@ export class AccountReadClient {
     try {
       response = await this.fetcher(url, {
         method: 'GET',
-        headers: { accept: 'application/json', 'user-agent': '@gryps.finance/agent-mcp-internal-observer/0.1' },
+        headers: { accept: 'application/json', 'user-agent': 'gryps-agent-mcp-internal-observer/0.1' },
         redirect: 'error',
         signal: AbortSignal.timeout(this.config.timeoutMs),
       })

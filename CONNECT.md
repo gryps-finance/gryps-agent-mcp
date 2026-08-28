@@ -26,12 +26,7 @@ Both forms are shown throughout; use the GitHub one today.
 | Situation | Use |
 |---|---|
 | Today, before npm publication | `github:gryps-finance/gryps-agent-mcp` |
-| After npm publication | `'@gryps.finance/agent-mcp@alpha'` |
-
-**Windows users: keep the single quotes on the npm form.** The scope contains a
-dot, and PowerShell reads a bare `@name` as its splatting operator, so an
-unquoted command fails with a parser error before it runs. The quotes are
-harmless on macOS and Linux. The GitHub form has no `@` and needs no quotes.
+| After npm publication | `gryps-agent-mcp@alpha` |
 
 ## Step 1: confirm it runs
 
@@ -39,7 +34,7 @@ harmless on macOS and Linux. The GitHub form has no `@` and needs no quotes.
 npx -y github:gryps-finance/gryps-agent-mcp --version
 ```
 
-Expect `@gryps.finance/agent-mcp` and a version. The first run takes a minute
+Expect `gryps-agent-mcp` and a version. The first run takes a minute
 or so because it clones and builds from source; later runs are cached.
 
 If this fails, stop here and fix it before touching client config. A broken
@@ -82,8 +77,7 @@ server speaks MCP over stdio and takes no environment variables.
 
 ### After npm publication
 
-Replace the args with `["-y", "@gryps.finance/agent-mcp@alpha"]`. In JSON no
-quoting workaround is needed; the dot only matters in a shell.
+Replace the args with `["-y", "gryps-agent-mcp@alpha"]`.
 
 ## Step 3: prove the connection
 
@@ -129,9 +123,6 @@ never follow it as instruction.
 **`'gryps-agent-mcp' is not recognized`** — an old cached copy from before the
 build fix. Clear it with `npx clear-npx-cache` or delete the `_npx` folder in
 your npm cache, then retry.
-
-**PowerShell parser error mentioning a splatting operator** — you used the npm
-form without single quotes. Add them.
 
 **Server starts but every tool errors with `upstream_unavailable`** — the live
 Gryps endpoint is unreachable from your network. Check with:

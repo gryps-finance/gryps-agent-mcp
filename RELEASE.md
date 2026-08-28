@@ -15,7 +15,7 @@ The automated gate must prove:
 - strict TypeScript passes;
 - all unit and public-boundary tests pass;
 - the production build succeeds;
-- MCP initialise and tool discovery return exactly four read-only tools;
+- MCP initialise and tool discovery return exactly the frozen read-only tool allowlist;
 - the npm tarball contains only the allowlisted release files;
 - a clean consumer install can start the packed MCP binary;
 - the current live endpoint returns a healthy venue, listed markets, a canonical
@@ -24,11 +24,11 @@ The automated gate must prove:
 
 ## Human gate before the first npm publication
 
-- [x] Confirm the package name `@gryps.finance/agent-mcp`.
+- [x] Confirm the package name `gryps-agent-mcp`.
 - [x] Select the public source repository and add its URL to `package.json`.
-- [ ] Confirm the `gryps.finance` npm organisation and publisher permissions.
+- [ ] Confirm npm publisher permissions for the account doing the first publish.
 - [ ] Confirm the MIT licence and copyright holder.
-- [ ] Configure npm trusted publishing or an approved granular token with 2FA.
+- [ ] Configure npm trusted publishing after the first publish.
 - [ ] Review the packed tarball from the release commit.
 - [ ] Test Claude Desktop and Codex from the packed tarball on clean profiles.
 - [ ] Complete a security review of the public boundary and package.
@@ -38,38 +38,40 @@ The automated gate must prove:
   dist-tag.
 - [ ] Name a support and rollback owner for the alpha window.
 
-## Publishing is automated and cannot be done locally
+## Publish the first version locally, then automate everything after
 
-npm only accepts provenance generated on a cloud runner from a public
-repository. Because `publishConfig.provenance` is `true`, a local
-`npm publish` fails by design. Publication runs through
-`.github/workflows/publish.yml` using npm trusted publishing (OIDC), so no npm
-token is stored in this repository.
+npm attaches a trusted publisher to an existing package, so trusted publishing
+cannot be configured before the package exists. npm's interface redirects that
+attempt into creating a Team, which is not what is needed.
 
-### The first publish needs a token, later ones do not
+The way through is a single local publish. It needs no token: `npm login`
+authenticates interactively and answers 2FA at the prompt, which is exactly what
+a CI runner cannot do. **Do not create a token with "Bypass two-factor
+authentication" for this.** npm warns against it on the token page and is
+restricting that token class; trusted publishing exists to replace it.
 
-npm attaches a trusted publisher to an existing package, so the setting cannot
-be configured before the package exists. The npm interface tends to redirect
-that attempt into creating a Team, which is not what is needed.
+Provenance is requested by the workflow with an explicit `--provenance` flag
+rather than in `publishConfig`, so a local publish is not blocked by it.
 
-Break the loop by authenticating the first publish with a token. Provenance is
-still produced, because provenance depends on running on a cloud runner from a
-public repository, not on how the publish authenticated.
+### One time, to create the package
 
-1. On npmjs.com create a **Granular Access Token**, scoped to the
-   `gryps.finance` organisation with **Read and write** packages permission and
-   a short expiry.
-2. In this repository add it as the Actions secret `NPM_TOKEN`
-   (Settings, Secrets and variables, Actions).
-3. Run the Publish workflow with `dry-run` unchecked. The package now exists.
-4. On npmjs.com open the package settings, find **Trusted Publisher**, choose
-   **GitHub Actions**, and set organisation `gryps-finance`, repository
-   `gryps-agent-mcp`, workflow filename `publish.yml`. Allow `npm publish`.
-5. **Delete the `NPM_TOKEN` secret and revoke the token.** Every later release
-   authenticates over OIDC with no stored credential.
+```bash
+npm login
+npm publish --tag alpha
+```
 
-The workflow supports both paths with no edits: it uses the token when the
-secret is present and OIDC when it is not.
+The first version ships without a provenance attestation. That is the only cost,
+and it is acceptable for an alpha.
+
+### Then switch to trusted publishing
+
+1. On npmjs.com open the package settings, find **Trusted Publisher**, choose
+   **GitHub Actions**.
+2. Set organisation `gryps-finance`, repository `gryps-agent-mcp`, workflow
+   filename `publish.yml`. Allow `npm publish`.
+
+Every release after this runs through the Publish workflow, authenticates over
+OIDC with no stored credential, and carries provenance.
 
 ### Running a release
 

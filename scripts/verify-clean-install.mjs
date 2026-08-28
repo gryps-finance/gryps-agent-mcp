@@ -39,8 +39,7 @@ try {
   const binary = join(
     temporaryRoot,
     'node_modules',
-    '@gryps.finance',
-    'agent-mcp',
+    'gryps-agent-mcp',
     'dist',
     'index.js',
   )
