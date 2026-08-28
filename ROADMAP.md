@@ -75,38 +75,20 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 - [ ] Paper-session bookkeeping (positions, PnL) for strategy evaluation without execution.
 - [ ] Operator diagnostics tool (config echo, cache stats, upstream latency).
 
-## 5. Execution gateway (separate package, never this one)
+## 5. Execution: out of scope for this package
 
-Blockers before any code merges (from [BACKEND-INTEGRATION.md](BACKEND-INTEGRATION.md)):
+Execution capability does not belong in this package and will never be added to
+it. It requires a separate process and package with its own signer boundary,
+short-lived delegated authority, mandate ceilings, allowlists, idempotency,
+unknown-state reconciliation, halt, revocation, and reduce-only recovery, and
+its own security review bar and release cadence.
 
-- [ ] Versioned API contract or OpenAPI publication from the backend owner.
-- [ ] Non-empty owned test account validating every account field and pagination.
-- [ ] Staging access with a reproducible session-key registration/revocation drill.
-- [ ] Signed order, cancel, reduce-only close, and fill reconciliation on staging.
-- [ ] Query-by-request-id or an agreed deterministic fallback for unknown outcomes.
-- [ ] Confirmed session-key scope, expiry units, withdrawal exclusion, revocation semantics.
-- [ ] Fee-basis decision (per side vs round trip) and measured spread/slippage.
-- [ ] Backend owner, compatibility policy, rate limits, incident path, and SLO.
+That work is tracked privately and is gated on independent verification
+evidence. No update to `@gryps/agent-mcp` moves a user toward it.
 
-Design requirements once unblocked:
+## 6. Observability for this package
 
-- [ ] Separate `@gryps/execution-gateway` process and package with its own review bar.
-- [ ] EIP-712 signer boundary: keys live in a signer process/enclave, never in the MCP server.
-- [ ] Short-lived delegated session keys; registration and revocation drills automated.
-- [ ] Mandate ceilings enforced in code: max notional, per-symbol allowlist,
-      max leverage, daily loss halt, reduce-only recovery mode.
-- [ ] Idempotency keys on every order mutation; unknown-state reconciliation loop.
-- [ ] Kill switch: one command halts new orders and flattens or freezes per mandate.
-- [ ] Append-only audit log of every intent, signature, submission, and outcome.
-- [ ] Paper-trading mode that exercises the identical code path minus the signer.
-
-## 6. Supervised and agentic live (gates G1–G6)
-
-- [ ] G1–G4: paper and staging evidence, drills, reconciliation proofs.
-- [ ] G5: the $50–100 supervised live test with full audit capture.
-- [ ] G6: formal operating approval, monitoring, alerting, and rollback rehearsal
-      before any agent runs unattended.
-- [ ] Risk engine as a standing service: position limits, drawdown halts,
-      exposure aggregation across accounts.
-- [ ] Observability: OpenTelemetry traces from tool call → upstream → envelope,
-      alerting on schema drift, latency, and error-rate SLOs.
+- [ ] OpenTelemetry traces from tool call through upstream to envelope.
+- [ ] Alerting on upstream schema drift, latency, and error rate.
+- [ ] Latency and availability objectives, set only after a measured baseline
+      exists rather than asserted in advance.

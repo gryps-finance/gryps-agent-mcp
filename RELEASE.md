@@ -24,23 +24,24 @@ The automated gate must prove:
 
 ## Human gate before the first npm publication
 
+- [x] Confirm the package name `@gryps/agent-mcp`.
+- [x] Select the public source repository and add its URL to `package.json`.
 - [ ] Confirm the `@gryps` npm organisation and publisher permissions.
-- [ ] Confirm the package name `@gryps/agent-mcp`.
 - [ ] Confirm the MIT licence and copyright holder.
-- [ ] Create or select the public source repository and add its URL to
-  `package.json`.
 - [ ] Configure npm trusted publishing or an approved granular token with 2FA.
 - [ ] Review the packed tarball from the release commit.
 - [ ] Test Claude Desktop and Codex from the packed tarball on clean profiles.
-- [ ] Confirm the fee-basis limitation remains visible.
-- [ ] Confirm the landing-page install command uses the published dist-tag.
+- [ ] Complete a security review of the public boundary and package.
+- [ ] Confirm the friction lower-bound and fee-basis limitations remain visible
+  in tool output and in the README.
+- [ ] Confirm the landing-page install command matches the published name and
+  dist-tag.
 - [ ] Name a support and rollback owner for the alpha window.
-- [ ] Record backend ownership and compatibility contacts for the v2 API.
 
 ## First publication
 
 Publish the prerelease under the `alpha` tag. Do not make it `latest` during the
-small-cohort test.
+initial limited-access period.
 
 ```bash
 npm publish --tag alpha --access public --provenance
@@ -57,4 +58,4 @@ Do not delete a published package version. If a material defect is found:
 1. Deprecate the affected version with a specific reason.
 2. Move the public install instructions back to the last verified version.
 3. Publish a corrected prerelease with a new immutable version.
-4. Record the incident and the evidence required to reopen the alpha.
+4. Record what happened and the evidence required to resume the alpha.

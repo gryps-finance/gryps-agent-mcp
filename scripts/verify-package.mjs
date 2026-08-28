@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const npmCli = process.env.npm_execpath
@@ -17,7 +18,6 @@ for (const required of [
   'README.md',
   'SECURITY.md',
   'ARCHITECTURE.md',
-  'BACKEND-INTEGRATION.md',
   'RELEASE.md',
   'CHANGELOG.md',
   'LICENSE',
@@ -30,4 +30,33 @@ for (const path of files) {
   assert.doesNotMatch(path, /(write|signer|private-key|engineWire)/i)
 }
 assert.ok(pack.unpackedSize < 300_000, `Package is unexpectedly large: ${pack.unpackedSize} bytes`)
-process.stdout.write(`Package boundary passed: ${files.length} files, ${pack.unpackedSize} unpacked bytes.\n`)
+
+/**
+ * Founders-internal readiness content must never ship. Publishing an assessment
+ * of what the backend cannot yet do is a disclosure decision, not a docs
+ * decision, so it is enforced here rather than left to review.
+ */
+const FORBIDDEN_CONTENT = [
+  /backend owner/i,
+  /\bSLO\b/,
+  /incident path/i,
+  /staging access/i,
+  /session-key (registration|drill)/i,
+  /G1[-–]G6/,
+  /\$50[-–]100/,
+  /supervised live/i,
+  /engineWire/,
+  /Mango/,
+]
+const shippedDocs = files.filter((path) => path.endsWith('.md'))
+for (const doc of shippedDocs) {
+  const text = readFileSync(fileURLToPath(new URL(`../${doc}`, import.meta.url)), 'utf8')
+  for (const pattern of FORBIDDEN_CONTENT) {
+    assert.doesNotMatch(text, pattern, `${doc} contains founders-internal content matching ${pattern}`)
+  }
+}
+
+process.stdout.write(
+  `Package boundary passed: ${files.length} files, ${pack.unpackedSize} unpacked bytes, ` +
+    `${shippedDocs.length} shipped docs clean of internal content.\n`,
+)
