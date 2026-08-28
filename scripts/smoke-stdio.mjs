@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import { PUBLIC_TOOL_NAMES } from '../dist/constants.js'
+
+const child = spawn(process.execPath, [fileURLToPath(new URL('../dist/index.js', import.meta.url))], {
+  stdio: ['pipe', 'pipe', 'pipe'],
+})
+
+let stdout = ''
+let stderr = ''
+child.stdout.setEncoding('utf8')
+child.stderr.setEncoding('utf8')
+child.stdout.on('data', (chunk) => {
+  stdout += chunk
+})
+child.stderr.on('data', (chunk) => {
+  stderr += chunk
+})
+
+const messages = [
+  {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: '2025-06-18',
+      capabilities: {},
+      clientInfo: { name: 'gryps-release-smoke', version: '1.0.0' },
+    },
+  },
+  { jsonrpc: '2.0', method: 'notifications/initialized', params: {} },
+  { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} },
+]
+
+for (const message of messages) child.stdin.write(`${JSON.stringify(message)}\n`)
+
+const deadline = Date.now() + 5_000
+while (Date.now() < deadline && !stdout.split('\n').some((line) => line.includes('"id":2'))) {
+  await new Promise((resolve) => setTimeout(resolve, 25))
+}
+
+child.kill()
+const responses = stdout
+  .split('\n')
+  .filter(Boolean)
+  .map((line) => JSON.parse(line))
+const toolResponse = responses.find((response) => response.id === 2)
+assert.ok(toolResponse, `No tools/list response. stderr: ${stderr}`)
+const names = toolResponse.result.tools.map((tool) => tool.name)
+assert.deepEqual(names, [...PUBLIC_TOOL_NAMES])
+for (const tool of toolResponse.result.tools) {
+  assert.equal(tool.annotations?.readOnlyHint, true)
+  assert.equal(tool.annotations?.destructiveHint, false)
+}
+process.stdout.write(`MCP stdio smoke passed with ${names.length} public read tools.\n`)
