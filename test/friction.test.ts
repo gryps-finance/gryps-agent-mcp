@@ -48,3 +48,44 @@ test('prices a better fee tier without inventing one that does not exist', async
     (error: unknown) => error instanceof PublicMcpError && error.code === 'not_found',
   )
 })
+
+test('reports both readings while the fee direction is unresolved', async () => {
+  const sample = await new FrictionService(client()).sample('BTCUSDT')
+  assert.equal(sample.feeDirection.resolved, false)
+  assert.equal(sample.feeDirection.assumed, 'per-side')
+  assert.equal(sample.feeDirection.engineReportedBps, 12)
+  assert.equal(sample.feeDirection.roundTripBpsIfPerSide, 24)
+  assert.equal(sample.feeDirection.roundTripBpsIfRoundTrip, 12)
+  assert.match(sample.feeDirection.note, /UNRESOLVED/)
+  assert.match(sample.limitations.join(' '), /24 bps under that reading and 12 bps under the other/)
+})
+
+test('marks the direction resolved when an operator declares it, either way', async () => {
+  const roundTrip = await new FrictionService(client(), { feeIsRoundTrip: true }).sample('BTCUSDT')
+  assert.equal(roundTrip.feeDirection.resolved, true)
+  assert.equal(roundTrip.feeDirection.assumed, 'round-trip')
+  assert.doesNotMatch(roundTrip.limitations.join(' '), /does not state fee direction/)
+
+  // Declaring per side is not the same as never having asked.
+  const perSide = await new FrictionService(client(), { feeIsRoundTrip: false }).sample('BTCUSDT')
+  assert.equal(perSide.feeDirection.resolved, true)
+  assert.equal(perSide.feeDirection.assumed, 'per-side')
+  assert.equal(perSide.quote.roundTripBps, 24)
+  assert.match(perSide.basisNote, /operator-declared/)
+})
+
+test('the fee-direction interval includes measured spread on both sides', async () => {
+  const sample = await new FrictionService(client(), { spreadBpsPerSide: 8 }).sample('BTCUSDT')
+  assert.equal(sample.feeDirection.roundTripBpsIfPerSide, 24 + 16)
+  assert.equal(sample.feeDirection.roundTripBpsIfRoundTrip, 12 + 16)
+})
+
+test('names the absent engine spread surface rather than implying spread is zero', async () => {
+  const sample = await new FrictionService(client()).sample('BTCUSDT')
+  assert.equal(sample.spreadSurface.status, 'absent')
+  assert.equal(sample.spreadSurface.probedAtIso, '2026-08-28')
+  assert.match(sample.spreadSurface.note, /absent upstream, not merely unwired/)
+
+  const supplied = await new FrictionService(client(), { spreadBpsPerSide: 8 }).sample('BTCUSDT')
+  assert.equal(supplied.spreadSurface.status, 'operator-supplied')
+})

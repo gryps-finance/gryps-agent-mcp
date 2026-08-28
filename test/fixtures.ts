@@ -7,7 +7,7 @@ export const testConfig: PublicMcpConfig = {
   cacheTtlMs: 10_000,
   comparisonUrl: 'https://book.example.test/info',
   comparisonTakerFeeBps: 4.5,
-  feeIsRoundTrip: false,
+  feeIsRoundTrip: undefined,
   spreadBpsPerSide: undefined,
 }
 

@@ -154,3 +154,44 @@ test('maps an unavailable upstream to a sanitised upstream_unavailable envelope'
   assert.doesNotMatch(payload.error.message, /ECONNREFUSED|10\.0\.0\.7/)
   await client.close()
 })
+
+test('a fresh caller is given one next step over the wire, not a catalogue', async () => {
+  const { client } = await connectedClient()
+  const response = await client.callTool({ name: 'gryps_next_step', arguments: {} })
+  assert.notEqual(response.isError, true)
+  const payload = response.structuredContent as {
+    data: { recommended: { id: string; autonomy: string }[]; capabilityBoundary: string }
+  }
+  assert.equal(payload.data.recommended.length, 1)
+  assert.equal(payload.data.recommended[0]?.autonomy, 'read-only')
+  assert.match(payload.data.capabilityBoundary, /never trades, signs, or holds assets/)
+  await client.close()
+})
+
+test('the prompt library withholds live guidance from a browsing caller', async () => {
+  const { client } = await connectedClient()
+  const response = await client.callTool({
+    name: 'gryps_prompt_library',
+    arguments: { stage: 'fund' },
+  })
+  const payload = response.structuredContent as {
+    data: { withheld: { count: number; reason: string } }
+  }
+  assert.ok(payload.data.withheld.count > 0)
+  assert.match(payload.data.withheld.reason, /funding station/)
+  await client.close()
+})
+
+test('onboarding works with no network, because the library is embedded', async () => {
+  const failingFetch: typeof fetch = async () => {
+    throw new Error('no network')
+  }
+  const server = createPublicServer(testConfig, { fetcher: failingFetch, retryDelayMs: 0 })
+  const client = new Client({ name: 'gryps-server-test', version: '1.0.0' })
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+
+  const response = await client.callTool({ name: 'gryps_next_step', arguments: {} })
+  assert.notEqual(response.isError, true, 'onboarding must survive an unreachable venue')
+  await client.close()
+})

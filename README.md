@@ -18,17 +18,11 @@ is built so that a routine upgrade can never quietly change that.
 Requires Node.js 22.13 or later. See [CONNECT.md](CONNECT.md) for the full
 two-minute setup, including client configuration and troubleshooting.
 
-**Not yet on npm.** Until the package is published, install from source:
-
-```bash
-npx -y github:gryps-finance/gryps-agent-mcp
-```
-
-Once published, the install becomes:
-
 ```bash
 npx -y gryps-agent-mcp@alpha
 ```
+
+To run the unreleased main branch instead: `npx -y github:gryps-finance/gryps-agent-mcp`.
 
 Example MCP client configuration:
 
@@ -61,12 +55,14 @@ Then ask your client:
 | `gryps_list_markets` | Browse the live v2 market catalogue with bounded search and pagination. |
 | `gryps_get_market` | Resolve one exact symbol or unique base asset and return live price and leverage limits. |
 | `gryps_get_fee_schedule` | The engine-reported fee tier ladder. |
+| `gryps_next_step` | Ask what to do next. On a fresh install it returns one starting point rather than a catalogue, then routes the journey from there. |
+| `gryps_prompt_library` | Browse 25 staged prompts by journey stage, experience level, purpose or free text. Each says what it does and why it matters. |
 | `gryps_venue_status` | API health, build version, settlement chain, and contract. |
 
 All tools are annotated read-only and non-destructive. Every response uses a
 versioned JSON envelope naming its live source, fetch time, and limitations.
 
-## The three honesty rules
+## The four honesty rules
 
 These are structural, not stylistic. They are enforced by tests.
 

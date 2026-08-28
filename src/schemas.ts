@@ -15,6 +15,7 @@ export const configSchema = z
     chainId: z.union([z.number(), z.string()]),
     contractAddress: z.string().min(1).optional(),
     contract: z.string().min(1).optional(),
+    usdcAddress: z.string().min(1).optional(),
   })
   .passthrough()
 

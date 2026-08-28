@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased (0.2.0-alpha.3)
+
+- Added `gryps_next_step`: journey-aware onboarding. On a fresh install it
+  returns one starting point rather than a catalogue, then routes from there.
+- Added `gryps_prompt_library`: 25 staged prompts searchable by journey stage,
+  experience level, purpose, autonomy, or free text.
+- Both enforce the money line. Exploration below it (read-only and paper) is
+  never withheld; live-stage guidance is withheld until the caller states the
+  funding station is complete, or asks for that level deliberately. Recovery
+  prompts are never gated, because they are needed exactly when someone is
+  least able to go looking.
+- The library is embedded rather than read from disk, so onboarding works when
+  the venue is unreachable. Covered by test.
+- Responses carry a capability boundary: these are prompts for the caller to
+  run, describing a journey that continues outside a package that cannot trade.
+- README and CONNECT.md now lead with the published npm install rather than the
+  GitHub fallback, and the honesty-rule count is corrected to four.
+
 ## Unreleased (0.2.0-alpha.2)
 
 - Added `gryps_indicative_quote`: an indicative execution estimate for one clip,

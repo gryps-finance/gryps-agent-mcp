@@ -5,6 +5,7 @@ import type { PublicMcpConfig } from './config.js'
 import { PUBLIC_TOOL_NAMES, SERVER_NAME, PACKAGE_VERSION } from './constants.js'
 import { errorEnvelope } from './errors.js'
 import { SIGNAL_FAMILIES } from './analysis.js'
+import { AUTONOMIES, LEVELS, PURPOSES, STAGES } from './library.js'
 import { PublicReadService } from './service.js'
 
 function result(payload: object, isError = false) {
@@ -200,6 +201,55 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
       annotations,
     },
     ({ symbol }) => safely(() => service.referencePrice({ symbol })),
+  )
+
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[10],
+    {
+      title: 'Find the next step in the Gryps journey',
+      description:
+        'Recommend what to do next, given where the caller already is. Call it with no arguments on a fresh install to get one starting point rather than a catalogue. Prompts for live stages are withheld until the funding station is complete, because exploration should be free and commitment should be deliberate. Recovery prompts are never withheld.',
+      inputSchema: {
+        currentPromptId: z
+          .string()
+          .trim()
+          .min(1)
+          .max(80)
+          .optional()
+          .describe('The prompt just completed. Omit for a fresh start.'),
+        fundStationComplete: z
+          .boolean()
+          .optional()
+          .describe('Set true only if the caller has funded and authorised an account elsewhere. Unlocks live-stage guidance.'),
+      },
+      annotations,
+    },
+    ({ currentPromptId, fundStationComplete }) =>
+      safely(async () =>
+        service.nextStep({
+          ...(currentPromptId === undefined ? {} : { currentPromptId }),
+          ...(fundStationComplete === undefined ? {} : { fundStationComplete }),
+        }),
+      ),
+  )
+
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[11],
+    {
+      title: 'Browse the Gryps prompt library',
+      description:
+        'Search the staged prompt library by journey stage, experience level, purpose, autonomy, or free text. Every entry says what it does and why it matters. These are prompts for the caller to run, not actions this server performs.',
+      inputSchema: {
+        stage: z.enum(STAGES).optional().describe('Journey stage, from land through operate.'),
+        level: z.enum(LEVELS).optional().describe('Experience level, from never-used-an-agent to built-bots.'),
+        purpose: z.enum(PURPOSES).optional(),
+        autonomy: z.enum(AUTONOMIES).optional().describe('Asking for a live level by name is treated as a deliberate request.'),
+        text: z.string().trim().min(1).max(100).optional(),
+        fundStationComplete: z.boolean().optional(),
+      },
+      annotations,
+    },
+    (input) => safely(async () => service.promptLibrary(input)),
   )
 
   return server

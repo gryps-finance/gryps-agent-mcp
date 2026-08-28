@@ -24,6 +24,8 @@ test('public tool allowlist is frozen', () => {
     'gryps_route_compare',
     'gryps_indicative_quote',
     'gryps_reference_price',
+    'gryps_next_step',
+    'gryps_prompt_library',
   ])
 })
 

@@ -148,3 +148,94 @@ test('indicative quote reports PRICE_UNAVAILABLE instead of inventing an estimat
   assert.equal(response.data.firm, false)
   assert.match(response.meta.limitations.join(' '), /no current price record/i)
 })
+
+test('friction floor carries both readings of the unresolved fee direction', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.frictionFloor({ symbol: 'BTC' })
+  assert.equal(response.data.roundTripBps, 24)
+  assert.equal(response.data.breakEvenEdgeBps, 36)
+  assert.equal(response.data.feeDirectionRange.resolved, false)
+  assert.equal(response.data.feeDirectionRange.roundTripBpsIfPerSide, 24)
+  assert.equal(response.data.feeDirectionRange.roundTripBpsIfRoundTrip, 12)
+  assert.equal(response.data.feeDirectionRange.breakEvenEdgeBpsIfPerSide, 36)
+  assert.equal(response.data.feeDirectionRange.breakEvenEdgeBpsIfRoundTrip, 18)
+  assert.equal(response.data.provenance.spreadSurface.status, 'absent')
+})
+
+test('edge check flags a verdict that flips on the unresolved fee direction', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  // 25 bps clears the round-trip reading (18 required) but not the per-side one (36).
+  const knife = await service.edgeCheck({ symbol: 'BTC', source: 'test', claimedEdgeBps: 25 })
+  assert.equal(knife.data.clears, false)
+  assert.equal(knife.data.feeDirectionSensitivity?.alternateClears, true)
+  assert.equal(knife.data.feeDirectionSensitivity?.verdictStable, false)
+  assert.match(knife.meta.limitations.join(' '), /verdict FLIPS under the other reading/)
+
+  const clear = await service.edgeCheck({ symbol: 'BTC', source: 'test', claimedEdgeBps: 90 })
+  assert.equal(clear.data.clears, true)
+  assert.equal(clear.data.feeDirectionSensitivity?.verdictStable, true)
+  assert.match(clear.meta.limitations.join(' '), /holds under both readings/)
+})
+
+test('edge check drops the sensitivity block once the direction is declared', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+    { feeIsRoundTrip: true },
+  )
+  const response = await service.edgeCheck({ symbol: 'BTC', source: 'test', claimedEdgeBps: 25 })
+  assert.equal(response.data.feeDirectionSensitivity, null)
+  assert.equal(response.data.clears, true)
+})
+
+test('fee schedule distinguishes unverified from declared fee direction', async () => {
+  const unresolved = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const open = await unresolved.getFeeSchedule()
+  assert.equal(open.data.feeBasisStatus, 'unverified_per_side_or_round_trip')
+  assert.equal(open.data.feeBasisResolved, false)
+
+  const declared = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+    { feeIsRoundTrip: false },
+  )
+  const closed = await declared.getFeeSchedule()
+  assert.equal(closed.data.feeBasisStatus, 'declared_per_side')
+  assert.equal(closed.data.feeBasisResolved, true)
+})
+
+test('venue status refuses to relay a settlement identity that misses the pin', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  // The fixture endpoint reports a contract that is not the canonical one.
+  const response = await service.venueStatus()
+  assert.equal(response.data.settlement.status, 'mismatch')
+  assert.equal(response.data.settlement.mismatches.length, 1)
+  assert.match(response.data.settlement.mismatches[0] ?? '', /does not match the canonical/)
+  assert.match(response.meta.limitations.join(' '), /SETTLEMENT IDENTITY MISMATCH/)
+})
+
+test('venue status verifies a settlement identity that matches the pin', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({
+      config: testConfig,
+      fetcher: fixtureFetch({
+        '/api/v1/config': {
+          chainId: 137,
+          contractAddress: '0xc206b7725e6e6631516b4fea100f8a07bbc736ee',
+          usdcAddress: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+        },
+      }),
+    }),
+  )
+  const response = await service.venueStatus()
+  // Case must not decide identity: the same address in either case is the same address.
+  assert.equal(response.data.settlement.status, 'verified')
+  assert.deepEqual(response.data.settlement.mismatches, [])
+  assert.doesNotMatch(response.meta.limitations.join(' '), /SETTLEMENT IDENTITY/)
+})

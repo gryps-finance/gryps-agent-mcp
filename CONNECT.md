@@ -20,22 +20,21 @@ below will fail confusingly on an older runtime.
 
 ## Which install to use
 
-The package is **not on npm yet**. Until it is published, install from GitHub.
-Both forms are shown throughout; use the GitHub one today.
+The package is published. The GitHub form runs the unreleased main branch and
+is useful for testing changes before a release.
 
 | Situation | Use |
 |---|---|
-| Today, before npm publication | `github:gryps-finance/gryps-agent-mcp` |
-| After npm publication | `gryps-agent-mcp@alpha` |
+| Normal use | `gryps-agent-mcp@alpha` |
+| Testing unreleased changes | `github:gryps-finance/gryps-agent-mcp` |
 
 ## Step 1: confirm it runs
 
 ```bash
-npx -y github:gryps-finance/gryps-agent-mcp --version
+npx -y gryps-agent-mcp@alpha --version
 ```
 
-Expect `gryps-agent-mcp` and a version. The first run takes a minute
-or so because it clones and builds from source; later runs are cached.
+Expect `gryps-agent-mcp` and a version.
 
 If this fails, stop here and fix it before touching client config. A broken
 command is much easier to diagnose on its own than inside a client that only
@@ -55,7 +54,7 @@ Edit the config file:
   "mcpServers": {
     "gryps": {
       "command": "npx",
-      "args": ["-y", "github:gryps-finance/gryps-agent-mcp"]
+      "args": ["-y", "gryps-agent-mcp@alpha"]
     }
   }
 }
@@ -67,7 +66,7 @@ does not restart MCP servers.
 ### Claude Code
 
 ```bash
-claude mcp add gryps -- npx -y github:gryps-finance/gryps-agent-mcp
+claude mcp add gryps -- npx -y gryps-agent-mcp@alpha
 ```
 
 ### Codex and other MCP clients
@@ -75,13 +74,21 @@ claude mcp add gryps -- npx -y github:gryps-finance/gryps-agent-mcp
 Use the same command and arguments in whatever form your client expects. The
 server speaks MCP over stdio and takes no environment variables.
 
-### After npm publication
+### Testing unreleased changes
 
-Replace the args with `["-y", "gryps-agent-mcp@alpha"]`.
+Replace the args with `["-y", "github:gryps-finance/gryps-agent-mcp"]` to run the
+main branch. The first run is slower because it builds from source.
 
 ## Step 3: prove the connection
 
 Ask your assistant:
+
+> Ask Gryps what I should do first.
+
+That calls `gryps_next_step`, which returns one starting point rather than a
+catalogue. Follow it, then ask for the next step again to walk the journey.
+
+If you would rather test the data path directly:
 
 > Use Gryps to check the venue status, then tell me the friction floor for BTC.
 
@@ -101,6 +108,8 @@ from general knowledge instead of calling a tool, the server is not connected.
 | Is the Gryps price in line with the wider market? | `gryps_reference_price` |
 | Which markets exist, and what is BTC priced at? | `gryps_list_markets`, `gryps_get_market` |
 | Is the venue healthy, and on which chain? | `gryps_venue_status` |
+| I just installed this. What do I do? | `gryps_next_step` |
+| What else can I ask, for my experience level? | `gryps_prompt_library` |
 
 ## Read the answers correctly
 

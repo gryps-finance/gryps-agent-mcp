@@ -49,6 +49,54 @@ export const PUBLIC_TOOL_NAMES = [
   'gryps_route_compare',
   'gryps_indicative_quote',
   'gryps_reference_price',
+  'gryps_next_step',
+  'gryps_prompt_library',
 ] as const
 
 export type PublicToolName = (typeof PUBLIC_TOOL_NAMES)[number]
+
+/**
+ * Canonical Gryps v2 settlement identity, verified against the live engine on
+ * 2026-08-28. The engine reports its own chain and contract; this server
+ * compares that report against these pinned values instead of relaying it. A
+ * relayed identity proves nothing, because a wrong or hostile endpoint relays
+ * its own answer with exactly the same confidence.
+ */
+export const CANONICAL_SETTLEMENT = {
+  chainId: 137,
+  chainName: 'polygon',
+  contract: '0xc206B7725e6E6631516b4feA100F8A07Bbc736Ee',
+  collateralToken: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
+  verifiedAtIso: '2026-08-28',
+} as const
+
+/**
+ * Record of the search for a bid/ask or depth surface on the public v2 engine.
+ * Spread cannot be measured until one of these exists, so the friction floor
+ * stays a fee floor. This is a probe result, not an assumption: every path
+ * below returned 404 on the date recorded.
+ */
+export const SPREAD_SURFACE_PROBE = {
+  probedAtIso: '2026-08-28',
+  found: false,
+  endpointsProbed: [
+    'orderbook',
+    'orderbook/{symbol}',
+    'book',
+    'book/{symbol}',
+    'l2book',
+    'depth',
+    'depth/{symbol}',
+    'ticker',
+    'ticker/{symbol}',
+    'tickers',
+    'quote',
+    'quotes',
+    'spread',
+    'trades',
+  ],
+  reachableSurfaces: ['config', 'markets', 'prices', 'risk-config', 'market-data'],
+  note:
+    'No bid/ask or depth surface exists on the public v2 engine. Spread is absent upstream, ' +
+    'not merely unwired here. It cannot be measured from this package until the engine ships one.',
+} as const

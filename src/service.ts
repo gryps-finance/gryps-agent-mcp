@@ -1,4 +1,4 @@
-import { PRICE_SCALE, RESPONSE_SCHEMA_VERSION } from './constants.js'
+import { CANONICAL_SETTLEMENT, PRICE_SCALE, RESPONSE_SCHEMA_VERSION } from './constants.js'
 import { EngineReadClient } from './client.js'
 import { PublicMcpError } from './errors.js'
 import { FrictionService, type FrictionSample } from './friction.js'
@@ -10,6 +10,7 @@ import {
   type StackedSignal,
 } from './analysis.js'
 import { ComparisonVenue, compareRoutes, type VenueQuote } from './router.js'
+import { nextStep, queryLibrary, type LibraryFilter } from './library.js'
 import type { MarketRecord } from './schemas.js'
 
 interface EnvelopeMeta {
@@ -37,6 +38,71 @@ function envelope<T>(data: T, source: string[], limitations: string[] = []): Suc
       source,
       limitations,
     },
+  }
+}
+
+/**
+ * The provenance block every friction-derived tool carries. It states not just
+ * what was measured but which questions are still open, because a caller that
+ * cannot see the open questions will treat a floor as a fact.
+ */
+type SettlementStatus = 'verified' | 'mismatch' | 'unreported'
+
+export interface SettlementCheck {
+  chainId: number | string
+  contract: string | null
+  collateralToken: string | null
+  status: SettlementStatus
+  canonical: typeof CANONICAL_SETTLEMENT
+  mismatches: string[]
+}
+
+/**
+ * Compare the engine's self-reported settlement identity against the values
+ * pinned in this package. Relaying what an endpoint says about itself proves
+ * nothing: a wrong or hostile endpoint answers with the same confidence as the
+ * right one. This server states which of the two it is talking to.
+ */
+export function settlementCheck(config: {
+  chainId: number | string
+  contractAddress?: string | undefined
+  contract?: string | undefined
+  usdcAddress?: string | undefined
+}): SettlementCheck {
+  const contract = config.contractAddress ?? config.contract ?? null
+  const collateralToken = config.usdcAddress ?? null
+  const same = (a: string | null, b: string) => a !== null && a.toLowerCase() === b.toLowerCase()
+
+  const mismatches: string[] = []
+  if (String(config.chainId) !== String(CANONICAL_SETTLEMENT.chainId)) {
+    mismatches.push(
+      `Chain id ${config.chainId} does not match the canonical ${CANONICAL_SETTLEMENT.chainId} (${CANONICAL_SETTLEMENT.chainName}).`,
+    )
+  }
+  if (contract !== null && !same(contract, CANONICAL_SETTLEMENT.contract)) {
+    mismatches.push(`Settlement contract ${contract} does not match the canonical ${CANONICAL_SETTLEMENT.contract}.`)
+  }
+  if (collateralToken !== null && !same(collateralToken, CANONICAL_SETTLEMENT.collateralToken)) {
+    mismatches.push(
+      `Collateral token ${collateralToken} does not match the canonical ${CANONICAL_SETTLEMENT.collateralToken}.`,
+    )
+  }
+
+  const status: SettlementStatus =
+    mismatches.length > 0 ? 'mismatch' : contract === null ? 'unreported' : 'verified'
+
+  return { chainId: config.chainId, contract, collateralToken, status, canonical: CANONICAL_SETTLEMENT, mismatches }
+}
+
+function provenanceOf(sample: FrictionSample) {
+  return {
+    feeBasis: sample.feeBasis,
+    spreadBasis: sample.spreadBasis,
+    tierLevel: sample.tierLevel,
+    isLowerBound: sample.isLowerBound,
+    feeDirection: sample.feeDirection,
+    spreadSurface: sample.spreadSurface,
+    note: sample.basisNote,
   }
 }
 
@@ -70,7 +136,7 @@ export function resolveMarket(markets: MarketRecord[], requested: string): Marke
 export interface PublicReadServiceOptions {
   comparisonUrl?: string | null
   comparisonTakerFeeBps?: number
-  feeIsRoundTrip?: boolean
+  feeIsRoundTrip?: boolean | undefined
   spreadBpsPerSide?: number | undefined
   timeoutMs?: number
   fetcher?: typeof fetch
@@ -172,14 +238,22 @@ export class PublicReadService {
         tiers,
         unit: 'basis_points',
         field: 'totalFeeRateBps',
-        feeBasisStatus: this.options.feeIsRoundTrip ? 'confirmed_round_trip' : 'unverified_per_side_or_round_trip',
+        feeBasisStatus:
+          this.options.feeIsRoundTrip === undefined
+            ? ('unverified_per_side_or_round_trip' as const)
+            : this.options.feeIsRoundTrip
+              ? ('declared_round_trip' as const)
+              : ('declared_per_side' as const),
+        feeBasisResolved: this.options.feeIsRoundTrip !== undefined,
       },
       [`${this.client.apiSource}/risk-config`],
       [
         'Values are reported exactly as supplied by the v2 engine.',
-        ...(this.options.feeIsRoundTrip
-          ? []
-          : ['Whether totalFeeRateBps is per side or round trip remains unverified.']),
+        ...(this.options.feeIsRoundTrip === undefined
+          ? [
+              'Whether totalFeeRateBps is per side or round trip remains unverified. The engine does not say, and the answer doubles or halves every cost figure derived from this ladder.',
+            ]
+          : ['Fee direction was declared by operator configuration, not by the engine.']),
         'Spread is not included and must not be inferred from this schedule.',
         'Use gryps_friction_floor for the number a trade actually has to beat.',
       ],
@@ -194,18 +268,29 @@ export class PublicReadService {
         symbol: market.symbol,
         roundTripBps: sample.quote.roundTripBps,
         breakEvenEdgeBps: breakEvenEdgeBps(sample.quote),
+        // The headline pair above assumes a fee direction the engine never
+        // states. Both readings travel with it so the assumption cannot be
+        // inherited silently by anything that sizes a position from this.
+        feeDirectionRange: {
+          resolved: sample.feeDirection.resolved,
+          roundTripBpsIfPerSide: sample.feeDirection.roundTripBpsIfPerSide,
+          roundTripBpsIfRoundTrip: sample.feeDirection.roundTripBpsIfRoundTrip,
+          breakEvenEdgeBpsIfPerSide: breakEvenEdgeBps({
+            ...sample.quote,
+            roundTripBps: sample.feeDirection.roundTripBpsIfPerSide,
+          }),
+          breakEvenEdgeBpsIfRoundTrip: breakEvenEdgeBps({
+            ...sample.quote,
+            roundTripBps: sample.feeDirection.roundTripBpsIfRoundTrip,
+          }),
+          note: sample.feeDirection.note,
+        },
         components: {
           protocolFeeBps: sample.quote.protocolFeeBps,
           openSpreadBps: sample.quote.openSpreadBps,
           closeSpreadBps: sample.quote.closeSpreadBps,
         },
-        provenance: {
-          feeBasis: sample.feeBasis,
-          spreadBasis: sample.spreadBasis,
-          tierLevel: sample.tierLevel,
-          isLowerBound: sample.isLowerBound,
-          note: sample.basisNote,
-        },
+        provenance: provenanceOf(sample),
         measuredAt: sample.quote.measuredAtIso,
       },
       [`${this.client.apiSource}/risk-config`],
@@ -228,13 +313,49 @@ export class PublicReadService {
       sample.quote,
       input.convictionMultiple === undefined ? {} : { convictionMultiple: input.convictionMultiple },
     )
+    // A verdict that flips depending on an unresolved question is not a
+    // verdict. Re-run the gate against the other reading of the fee rate and
+    // say plainly whether the answer holds either way.
+    const alternateRoundTripBps =
+      sample.feeDirection.assumed === 'per-side'
+        ? sample.feeDirection.roundTripBpsIfRoundTrip
+        : sample.feeDirection.roundTripBpsIfPerSide
+    const alternate = checkEdge(
+      { ...input, symbol: market.symbol },
+      { ...sample.quote, roundTripBps: alternateRoundTripBps },
+      input.convictionMultiple === undefined ? {} : { convictionMultiple: input.convictionMultiple },
+    )
+    const feeDirectionSensitivity = sample.feeDirection.resolved
+      ? null
+      : {
+          assumedReading: sample.feeDirection.assumed,
+          alternateReading: sample.feeDirection.assumed === 'per-side' ? 'round-trip' : 'per-side',
+          alternateRoundTripBps,
+          alternateRequiredEdgeBps: alternate.requiredEdgeBps,
+          alternateClears: alternate.clears,
+          verdictStable: alternate.clears === result.clears,
+        }
+
     return envelope(
-      { ...result, untrustedSignalNotice: UNTRUSTED_SIGNAL_NOTICE, frictionProvenance: sample.basisNote },
+      {
+        ...result,
+        untrustedSignalNotice: UNTRUSTED_SIGNAL_NOTICE,
+        frictionProvenance: sample.basisNote,
+        feeDirectionSensitivity,
+      },
       [`${this.client.apiSource}/risk-config`],
       [
         ...sample.limitations,
         ...(sample.isLowerBound
           ? ['Friction is a lower bound, so a claim that barely clears here may not clear in reality.']
+          : []),
+        ...(feeDirectionSensitivity && !feeDirectionSensitivity.verdictStable
+          ? [
+              'This verdict FLIPS under the other reading of the engine fee rate. The fee direction is unresolved, so this call is not decidable from live data alone. Treat it as a hold until the basis is confirmed.',
+            ]
+          : []),
+        ...(feeDirectionSensitivity?.verdictStable
+          ? ['The verdict holds under both readings of the unresolved fee direction.']
           : []),
       ],
     )
@@ -329,13 +450,7 @@ export class PublicReadService {
           engineQuoteSurface,
           oracleMid: null,
           estimate: null,
-          provenance: {
-            feeBasis: sample.feeBasis,
-            spreadBasis: sample.spreadBasis,
-            tierLevel: sample.tierLevel,
-            isLowerBound: sample.isLowerBound,
-            note: sample.basisNote,
-          },
+          provenance: provenanceOf(sample),
         },
         sources,
         [
@@ -375,13 +490,7 @@ export class PublicReadService {
           openCostUsd: (input.notionalUsd * openLegBps) / 10_000,
           roundTripCostUsd: (input.notionalUsd * sample.quote.roundTripBps) / 10_000,
         },
-        provenance: {
-          feeBasis: sample.feeBasis,
-          spreadBasis: sample.spreadBasis,
-          tierLevel: sample.tierLevel,
-          isLowerBound: sample.isLowerBound,
-          note: sample.basisNote,
-        },
+        provenance: provenanceOf(sample),
       },
       sources,
       [
@@ -477,6 +586,7 @@ export class PublicReadService {
       this.client.config(),
       this.client.markets(),
     ])
+    const settlement = settlementCheck(config)
     return envelope(
       {
         service: {
@@ -485,10 +595,7 @@ export class PublicReadService {
           build: health.build,
           upstreamTimestamp: health.timestamp,
         },
-        settlement: {
-          chainId: config.chainId,
-          contract: config.contractAddress ?? config.contract ?? null,
-        },
+        settlement,
         catalogue: {
           engineReportedMarketCount: markets.length,
           reconciledWithDocumentation: false,
@@ -499,7 +606,32 @@ export class PublicReadService {
       [
         'The engine-reported market count has not been reconciled with published Gryps documentation and must not be repeated as a public claim.',
         'A listed market count does not prove quote availability or trading readiness.',
+        ...(settlement.status === 'verified'
+          ? []
+          : [
+              `SETTLEMENT IDENTITY ${settlement.status.toUpperCase()}. The endpoint this server is pointed at does not report the canonical Gryps settlement identity: ${settlement.mismatches.join(' ')} Do not treat any figure from this server as describing canonical Gryps until the endpoint is corrected.`,
+            ]),
+        'Settlement identity is compared against values pinned in this package, not taken on the endpoint word.',
       ],
     )
+  }
+
+  /**
+   * Journey routing. No network access: the library is embedded, so onboarding
+   * still works when the venue is unreachable, which is exactly when a confused
+   * new user is most likely to be asking what to do.
+   */
+  async nextStep(input: { currentPromptId?: string | undefined; fundStationComplete?: boolean | undefined } = {}) {
+    return envelope(nextStep(input), ['embedded prompt library'], [
+      'These are prompts for you to run. This server performs none of them.',
+      'Live-stage guidance describes a journey that continues outside this package, which cannot trade, sign, or hold assets.',
+    ])
+  }
+
+  async promptLibrary(input: LibraryFilter = {}) {
+    return envelope(queryLibrary(input), ['embedded prompt library'], [
+      'These are prompts for you to run. This server performs none of them.',
+      'Prompts above the money line are withheld until the funding station is complete, or until requested deliberately by autonomy level.',
+    ])
   }
 }

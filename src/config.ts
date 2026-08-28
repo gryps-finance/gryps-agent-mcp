@@ -15,8 +15,12 @@ export interface PublicMcpConfig {
   cacheTtlMs: number
   comparisonUrl: string | null
   comparisonTakerFeeBps: number
-  /** Set only when the protocol team confirms the engine reports a round trip. */
-  feeIsRoundTrip: boolean
+  /**
+   * Direction of the engine fee rate, once confirmed. Undefined means the
+   * question is still open and the conservative per-side reading is assumed;
+   * false means confirmed per side. The distinction is reported to callers.
+   */
+  feeIsRoundTrip: boolean | undefined
   /** Operator-measured spread per side, in bps. Absent means spread is unmeasured. */
   spreadBpsPerSide: number | undefined
 }
@@ -72,8 +76,8 @@ function nonNegativeRate(raw: string | undefined, fallback: number, label: strin
   return value
 }
 
-function booleanFlag(raw: string | undefined, label: string): boolean {
-  if (raw === undefined) return false
+function booleanFlag(raw: string | undefined, label: string): boolean | undefined {
+  if (raw === undefined) return undefined
   if (raw === 'true') return true
   if (raw === 'false') return false
   throw new PublicMcpError('invalid_configuration', `${label} must be "true" or "false".`)
