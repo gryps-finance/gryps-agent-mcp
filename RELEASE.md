@@ -38,18 +38,43 @@ The automated gate must prove:
   dist-tag.
 - [ ] Name a support and rollback owner for the alpha window.
 
+## Publishing is automated and cannot be done locally
+
+npm only accepts provenance generated on a cloud runner from a public
+repository. Because `publishConfig.provenance` is `true`, a local
+`npm publish` fails by design. Publication runs through
+`.github/workflows/publish.yml` using npm trusted publishing (OIDC), so no npm
+token is stored in this repository.
+
+### One-time setup on npmjs.com
+
+1. Create the package placeholder or publish once the trusted publisher exists.
+2. Open the package settings, find **Trusted Publisher**, choose **GitHub Actions**.
+3. Set organisation `gryps-finance`, repository `gryps-agent-mcp`, workflow
+   filename `publish.yml`.
+4. Allow the `npm publish` action.
+
+### Running a release
+
+Use the **Publish** workflow from the Actions tab.
+
+- Leave `dry-run` checked first. That runs the full verification chain, packs
+  the tarball, prints its contents, and stops without publishing.
+- Re-run with `dry-run` unchecked to publish.
+- Publishing a GitHub Release also triggers it, always under the `alpha` tag.
+
+The workflow refuses to publish a version that already exists, and after a real
+publish it installs the package from the registry and starts it, so a broken
+release is caught immediately rather than by the first user.
+
 ## First publication
 
 Publish the prerelease under the `alpha` tag. Do not make it `latest` during the
-initial limited-access period.
+initial limited-access period. The workflow defaults to `alpha` for this reason.
 
-```bash
-npm publish --tag alpha --access public --provenance
-```
-
-After publication, install by exact version in a clean directory, repeat the
-MCP smoke test, and verify the npm package page before enabling the public site
-action.
+The workflow already installs the published version from the registry and
+starts it. After that, verify the npm package page shows the provenance
+attestation and links to this repository, then enable the public site action.
 
 ## Rollback
 

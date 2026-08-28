@@ -1,0 +1,106 @@
+name: Publish
+
+# Publishing happens here, never from a laptop. npm only accepts provenance
+# generated on a cloud runner from a public repository, so a local publish with
+# provenance enabled fails by design.
+#
+# Authentication is npm trusted publishing (OIDC). No npm token is stored in
+# this repository. The trusted publisher must be configured once on npmjs.com
+# against this repository and this workflow filename.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dist-tag:
+        description: 'npm dist-tag. Keep alpha until the release is proven.'
+        required: true
+        default: alpha
+        type: choice
+        options: [alpha, beta, latest]
+      dry-run:
+        description: 'Run every check and pack the tarball without publishing.'
+        required: true
+        default: true
+        type: boolean
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: verify and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # Trusted publishing needs Node >= 22.14 and npm >= 11.5.1.
+          node-version: 22.x
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Upgrade npm to a version that supports trusted publishing
+        # Node 22 ships npm 10.x, which is too old for OIDC publishing.
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - run: npm ci
+
+      - name: Full release verification
+        # Never publish something that has not passed the same gate as main.
+        run: npm run verify:release
+
+      - name: Internal boundary verification
+        run: npm run verify:internal
+
+      - name: Confirm this version is not already published
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Publishing $NAME@$VERSION"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "::error::$NAME@$VERSION is already published. Bump the version."
+            exit 1
+          fi
+          echo "Version is free."
+
+      - name: Pack and show tarball contents
+        run: |
+          npm pack --ignore-scripts
+          tar -tzf ./*.tgz | sort
+
+      - name: Publish (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry-run
+        run: npm publish --dry-run --tag "${{ inputs.dist-tag }}"
+
+      - name: Publish
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry-run)
+        run: npm publish --tag "${{ github.event_name == 'release' && 'alpha' || inputs.dist-tag }}"
+
+      - name: Verify the published package installs and starts
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry-run)
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          WORK=$(mktemp -d)
+          cd "$WORK"
+          npm init -y >/dev/null
+          # The registry can lag a few seconds behind a successful publish.
+          for i in 1 2 3 4 5 6; do
+            if npm install "$NAME@$VERSION" --no-audit --no-fund >/dev/null 2>&1; then
+              echo "Installed on attempt $i"
+              break
+            fi
+            echo "Not visible yet, retrying in 10s"
+            sleep 10
+          done
+          BIN="node_modules/$NAME/dist/index.js"
+          test -f "$BIN" || { echo "::error::Published package has no binary at $BIN"; exit 1; }
+          node "$BIN" --version

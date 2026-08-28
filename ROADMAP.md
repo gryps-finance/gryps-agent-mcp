@@ -45,9 +45,9 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 
 - [x] Tarball allowlist verification and clean-install smoke in the release gate.
 - [x] Dependabot for npm and GitHub Actions.
-- [ ] npm publish pipeline via GitHub Actions with OIDC trusted publishing.
-      Note: npm provenance links resolve only if the source repo is public;
-      decide public/private before the first publish or drop `provenance`.
+- [x] npm publish pipeline via GitHub Actions with OIDC trusted publishing.
+      Provenance requires a cloud runner and a public repository; both hold.
+      Publishing from a laptop is not possible while provenance is enabled.
 - [ ] Pin GitHub Actions to commit SHAs.
 - [ ] `npm audit` / OSV scan job in CI.
 - [ ] Signed release tags and a release checklist issue template.
