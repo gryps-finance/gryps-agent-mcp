@@ -54,7 +54,8 @@
     "start:internal": "node internal-dist/internal-src/index.js",
     "dev": "tsx src/index.ts",
     "dev:internal": "tsx internal-src/index.ts",
-    "prepack": "npm run clean && npm run build"
+    "prepack": "npm run clean && npm run build",
+    "prepare": "npm run build"
   },
   "publishConfig": {
     "access": "public",
