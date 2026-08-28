@@ -52,6 +52,20 @@ const route = await service.routeCompare({ symbol: 'BTC', side: 'long', notional
 assert.equal(route.status, 'ok')
 assert.equal(route.data.venues.length, 2)
 
+// An indicative estimate must never present itself as a firm quote.
+const quote = await service.indicativeQuote({ symbol: 'BTC', side: 'long', notionalUsd: 100_000 })
+assert.equal(quote.data.firm, false, 'a derived estimate must never claim to be firm')
+assert.equal(quote.data.quoteStatus, 'derived')
+assert.ok(quote.data.estimate.baseQuantity > 0)
+
+// The oracle is sanity-checked against an external mid, never against itself.
+const reference = await service.referencePrice({ symbol: 'BTC' })
+assert.equal(reference.data.oracleStatus, 'available')
+assert.ok(
+  reference.data.reference === null || Number.isFinite(reference.data.divergenceBps),
+  'divergence must be a real number whenever a reference mid was obtained',
+)
+
 process.stdout.write(
   [
     `Live smoke passed.`,
@@ -63,6 +77,12 @@ process.stdout.write(
       route.data.spreadBetweenVenuesBps === null
         ? ''
         : ` by ${route.data.spreadBetweenVenuesBps.toFixed(1)} bps`
+    }`,
+    `  indicative quote $100k: ${quote.data.estimate.baseQuantity.toFixed(4)} base, ${quote.data.quoteStatus} and non-firm`,
+    `  oracle vs reference mid: ${
+      reference.data.reference === null
+        ? 'reference unavailable'
+        : `${reference.data.divergenceBps.toFixed(2)} bps divergence`
     }`,
     '',
   ].join('\n'),

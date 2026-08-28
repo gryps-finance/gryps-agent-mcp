@@ -87,6 +87,12 @@ text written by strangers. Every response that touches a claimed edge carries a
 notice telling the model to treat that text as data to evaluate, never as
 instruction to follow.
 
+**A derived estimate is not a quote.** The public engine exposes no quote,
+estimate, or preview endpoint. `gryps_indicative_quote` therefore builds its
+estimate from the live oracle price plus measured friction, and says so:
+`firm: false`, `quoteStatus: "derived"`, and `engineQuoteSurface: "absent"`.
+An agent must not present it to a user as a price the venue offered.
+
 ## What it will not do
 
 - It will not tell you a signal is true. It only checks whether the claimed

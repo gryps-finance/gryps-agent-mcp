@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased (0.2.0-alpha.2)
+
+- Added `gryps_indicative_quote`: an indicative execution estimate for one clip,
+  built from the live oracle price plus measured friction. The engine exposes no
+  quote surface, so the response carries `firm: false`, `quoteStatus: derived`,
+  and `engineQuoteSurface: absent`. It is a cost model, never a tradable quote.
+- Added `gryps_reference_price`: the Gryps oracle beside a fair-value mid from a
+  public reference venue, with divergence in basis points. Anchors oracle sanity
+  checks and future paper-session pricing.
+- Live smoke now exercises all ten tools, asserting that a derived estimate can
+  never report itself as firm.
+- Published unscoped as `gryps-agent-mcp`. The `@gryps.finance` scope was
+  dropped because its dot breaks unquoted npx commands on Windows PowerShell.
+- Provenance moved from publishConfig to an explicit workflow flag so the first
+  publish can be done locally.
+
 ## Unreleased
 
 - Added `gryps_indicative_quote`: an indicative, non-firm execution estimate
