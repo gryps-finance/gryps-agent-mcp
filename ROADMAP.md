@@ -84,7 +84,7 @@ unknown-state reconciliation, halt, revocation, and reduce-only recovery, and
 its own security review bar and release cadence.
 
 That work is tracked privately and is gated on independent verification
-evidence. No update to `@gryps/agent-mcp` moves a user toward it.
+evidence. No update to `@gryps.finance/agent-mcp` moves a user toward it.
 
 ## 6. Observability for this package
 

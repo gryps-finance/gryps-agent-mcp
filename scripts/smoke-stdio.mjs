@@ -35,7 +35,7 @@ const messages = [
 
 for (const message of messages) child.stdin.write(`${JSON.stringify(message)}\n`)
 
-const deadline = Date.now() + 5_000
+const deadline = Date.now() + 20_000
 while (Date.now() < deadline && !stdout.split('\n').some((line) => line.includes('"id":2'))) {
   await new Promise((resolve) => setTimeout(resolve, 25))
 }

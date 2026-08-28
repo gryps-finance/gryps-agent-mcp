@@ -24,9 +24,9 @@ The automated gate must prove:
 
 ## Human gate before the first npm publication
 
-- [x] Confirm the package name `@gryps/agent-mcp`.
+- [x] Confirm the package name `@gryps.finance/agent-mcp`.
 - [x] Select the public source repository and add its URL to `package.json`.
-- [ ] Confirm the `@gryps` npm organisation and publisher permissions.
+- [ ] Confirm the `gryps.finance` npm organisation and publisher permissions.
 - [ ] Confirm the MIT licence and copyright holder.
 - [ ] Configure npm trusted publishing or an approved granular token with 2FA.
 - [ ] Review the packed tarball from the release commit.

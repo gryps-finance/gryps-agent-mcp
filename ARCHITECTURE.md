@@ -2,7 +2,7 @@
 
 ## Product boundary
 
-`@gryps/agent-mcp` is the permanent public read boundary. Its authority is
+`@gryps.finance/agent-mcp` is the permanent public read boundary. Its authority is
 limited to fetching and returning public Gryps v2 market and venue data.
 
 The package has four layers:

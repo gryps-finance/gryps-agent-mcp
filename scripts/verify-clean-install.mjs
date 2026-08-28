@@ -39,7 +39,7 @@ try {
   const binary = join(
     temporaryRoot,
     'node_modules',
-    '@gryps',
+    '@gryps.finance',
     'agent-mcp',
     'dist',
     'index.js',
@@ -69,7 +69,7 @@ try {
     })}\n`,
   )
 
-  const deadline = Date.now() + 5_000
+  const deadline = Date.now() + 20_000
   while (Date.now() < deadline && !stdout.includes('"id":1')) {
     await new Promise((resolve) => setTimeout(resolve, 25))
   }

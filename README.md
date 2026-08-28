@@ -18,17 +18,23 @@ is built so that a routine upgrade can never quietly change that.
 Requires Node.js 22.13 or later.
 
 ```bash
-npx -y @gryps/agent-mcp@alpha
+npx -y '@gryps.finance/agent-mcp@alpha'
 ```
 
-Example MCP client configuration:
+**Quote the package name.** The `@gryps.finance` scope contains a dot, and
+Windows PowerShell parses a bare `@name` as its splatting operator. Without the
+single quotes the command fails before it runs. Quoting is harmless on macOS
+and Linux, so quote it everywhere.
+
+Example MCP client configuration. This is JSON rather than shell, so no quoting
+concern applies here:
 
 ```json
 {
   "mcpServers": {
     "gryps": {
       "command": "npx",
-      "args": ["-y", "@gryps/agent-mcp@alpha"]
+      "args": ["-y", "@gryps.finance/agent-mcp@alpha"]
     }
   }
 }
@@ -96,7 +102,7 @@ instruction to follow.
 Configuration is explicit and never read from environment variables.
 
 ```bash
-npx -y @gryps/agent-mcp@alpha \
+npx -y '@gryps.finance/agent-mcp@alpha' \
   --api-base=https://example.invalid/api/v1 \
   --health-url=https://example.invalid/health \
   --comparison-url=off \

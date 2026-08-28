@@ -1,5 +1,5 @@
 {
-  "name": "@gryps/agent-mcp",
+  "name": "@gryps.finance/agent-mcp",
   "version": "0.2.0-alpha.1",
   "description": "MCP server that checks whether a trading signal can survive execution reality. Live Gryps v2 venue data, measured friction floor, and cost gating. Read-only.",
   "repository": {
