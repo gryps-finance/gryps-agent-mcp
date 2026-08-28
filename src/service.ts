@@ -395,6 +395,82 @@ export class PublicReadService {
     )
   }
 
+  async referencePrice(input: { symbol: string }) {
+    const market = await this.resolveSymbol(input.symbol)
+    const prices = await this.client.prices()
+    const price = prices.find((candidate) => normalise(candidate.symbol) === normalise(market.symbol))
+    const oracle = price
+      ? {
+          usd: Number(price.price) / PRICE_SCALE,
+          raw: price.price,
+          scale: PRICE_SCALE,
+          observedAt: new Date(price.timestamp).toISOString(),
+        }
+      : null
+
+    const baseLimitations = [
+      'The reference coin is derived by stripping the quote suffix, so contract specification and margining may differ between venues.',
+      'The reference mid is the midpoint of displayed top-of-book on the reference venue, not a tradable price.',
+      "The displayed spread is the reference venue's own book spread. It says nothing about Gryps spread.",
+      'Oracle and reference observations are not simultaneous, so divergence includes any timing skew.',
+      ...(oracle ? [] : ['The engine listed this market but returned no current price record, so divergence cannot be computed.']),
+    ]
+
+    if (!this.comparison) {
+      return envelope(
+        {
+          symbol: market.symbol,
+          oracle,
+          oracleStatus: oracle ? ('available' as const) : ('PRICE_UNAVAILABLE' as const),
+          reference: null,
+          referenceStatus: 'comparison_disabled' as const,
+          divergenceBps: null,
+        },
+        [`${this.client.apiSource}/prices`],
+        [
+          'Venue comparison is disabled in this server configuration, so no external reference mid is available.',
+          ...baseLimitations,
+        ],
+      )
+    }
+
+    let reference: Awaited<ReturnType<ComparisonVenue['referenceMid']>> = null
+    let referenceStatus: 'available' | 'not_listed' | 'reference_unavailable'
+    try {
+      reference = await this.comparison.referenceMid(market.symbol)
+      referenceStatus = reference ? 'available' : 'not_listed'
+    } catch {
+      referenceStatus = 'reference_unavailable'
+    }
+
+    const divergenceBps =
+      oracle && reference ? ((oracle.usd - reference.mid) / reference.mid) * 10_000 : null
+
+    return envelope(
+      {
+        symbol: market.symbol,
+        oracle,
+        oracleStatus: oracle ? ('available' as const) : ('PRICE_UNAVAILABLE' as const),
+        reference,
+        referenceStatus,
+        divergenceBps,
+      },
+      [
+        `${this.client.apiSource}/prices`,
+        ...(this.options.comparisonUrl ? [this.options.comparisonUrl] : []),
+      ],
+      [
+        ...baseLimitations,
+        ...(referenceStatus === 'not_listed'
+          ? ['This market is not listed on the reference venue, so no external mid exists for it.']
+          : []),
+        ...(referenceStatus === 'reference_unavailable'
+          ? ['The reference venue was unreachable. Only the Gryps oracle side of this read is available.']
+          : []),
+      ],
+    )
+  }
+
   async venueStatus() {
     const [health, config, markets] = await Promise.all([
       this.client.health(),

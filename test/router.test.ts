@@ -116,3 +116,52 @@ test('explains when the comparison venue is ranked out for depth, not price', as
     /ranked out because its displayed depth could not fill the clip/,
   )
 })
+
+test('reads oracle against reference mid and reports divergence in bps', async () => {
+  const service = serviceWith((url) =>
+    url.startsWith('https://book.example.test')
+      ? new Response(JSON.stringify(comparisonBook), { status: 200 })
+      : null,
+  )
+  const response = await service.referencePrice({ symbol: 'BTC' })
+  assert.equal(response.status, 'ok')
+  assert.equal(response.data.oracleStatus, 'available')
+  assert.equal(response.data.oracle?.usd, 79_620.6)
+  assert.equal(response.data.referenceStatus, 'available')
+  assert.equal(response.data.reference?.mid, 79_625)
+  assert.equal(response.data.reference?.displayedSpreadBps, ((79_650 - 79_600) / 79_625) * 10_000)
+  assert.equal(response.data.divergenceBps, ((79_620.6 - 79_625) / 79_625) * 10_000)
+  assert.match(response.meta.limitations.join(' '), /not a tradable price/)
+})
+
+test('reference price degrades to oracle-only when the reference venue is unreachable', async () => {
+  const service = serviceWith((url) =>
+    url.startsWith('https://book.example.test') ? new Response('gateway down', { status: 502 }) : null,
+  )
+  const response = await service.referencePrice({ symbol: 'BTC' })
+  assert.equal(response.data.referenceStatus, 'reference_unavailable')
+  assert.equal(response.data.reference, null)
+  assert.equal(response.data.divergenceBps, null)
+  assert.equal(response.data.oracle?.usd, 79_620.6)
+  assert.match(response.meta.limitations.join(' '), /unreachable/)
+})
+
+test('reference price treats an unlisted market as a real outcome, not an error', async () => {
+  const service = serviceWith((url) =>
+    url.startsWith('https://book.example.test') ? new Response('null', { status: 200 }) : null,
+  )
+  const response = await service.referencePrice({ symbol: 'BTC' })
+  assert.equal(response.data.referenceStatus, 'not_listed')
+  assert.equal(response.data.divergenceBps, null)
+  assert.match(response.meta.limitations.join(' '), /not listed on the reference venue/)
+})
+
+test('reference price reports comparison_disabled when no comparison venue is configured', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.referencePrice({ symbol: 'BTC' })
+  assert.equal(response.data.referenceStatus, 'comparison_disabled')
+  assert.equal(response.data.oracle?.usd, 79_620.6)
+  assert.match(response.meta.limitations.join(' '), /comparison is disabled/i)
+})

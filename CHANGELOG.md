@@ -11,6 +11,13 @@
   `quoteBasis` and `engineQuoteSurface`. When the engine ships a real quote
   surface, this tool's basis flips to venue-quoted without changing its
   contract. Test suite grew from 50 to 54.
+- Added `gryps_reference_price`: the live Gryps oracle price next to a
+  fair-value mid from the configured reference venue (top-of-book midpoint),
+  with divergence reported in basis points. This is the external anchor for
+  oracle sanity checks and the first piece of the reference pricing layer that
+  paper sessions need. Degrades typed rather than erroring: comparison
+  disabled, market not listed, and venue unreachable are all real outcomes
+  with the oracle side still served. Test suite grew from 54 to 58.
 
 ## Unreleased (0.2.0-alpha.1)
 

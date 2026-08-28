@@ -55,6 +55,9 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 
 ## 3. Data surface expansion (still read-only)
 
+- [x] Reference price read: Gryps oracle beside an external fair-value mid with
+      divergence in bps (`gryps_reference_price`). First piece of the reference
+      pricing layer that paper sessions need.
 - [ ] Candles/OHLCV, funding, and open-interest tools if and when the v2 API exposes them.
 - [~] RFQ quote-read tool (indicative quotes) — the venue is RFQ-based, so this is
       the honest answer to "is there executable liquidity", which the market list is not.

@@ -190,5 +190,17 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     ({ symbol, side, notionalUsd }) => safely(() => service.indicativeQuote({ symbol, side, notionalUsd })),
   )
 
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[9],
+    {
+      title: 'Compare the Gryps oracle to an external reference mid',
+      description:
+        'Read the live Gryps oracle price for one market next to a fair-value mid from a public reference venue, and report the divergence in basis points. The anchor for oracle sanity checks and paper-session pricing. The reference mid is a midpoint of displayed quotes, never a tradable price.',
+      inputSchema: { symbol: z.string().trim().min(1).max(40) },
+      annotations,
+    },
+    ({ symbol }) => safely(() => service.referencePrice({ symbol })),
+  )
+
   return server
 }

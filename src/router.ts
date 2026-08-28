@@ -124,6 +124,16 @@ export function comparisonCoin(symbol: string): string {
   return symbol.replace(/(USDT|USDC|USD)$/i, '').toUpperCase()
 }
 
+export interface ReferenceMid {
+  venueId: string
+  coin: string
+  mid: number
+  bestBid: number
+  bestAsk: number
+  /** The reference venue's own displayed book spread, not Gryps spread. */
+  displayedSpreadBps: number
+}
+
 export interface VenueQuote {
   venueId: string
   /** Indicative cost. Present but not executable when `exhausted` is true. */
@@ -168,6 +178,28 @@ export class ComparisonVenue {
       symbol,
       bids: bids.map((level) => ({ price: Number(level.px), size: Number(level.sz) })),
       asks: asks.map((level) => ({ price: Number(level.px), size: Number(level.sz) })),
+    }
+  }
+
+  /**
+   * Top-of-book reference mid. This is the external fair-value anchor used to
+   * sanity-check the Gryps oracle and, later, to feed paper sessions. It is a
+   * midpoint of displayed quotes, not a tradable price.
+   */
+  async referenceMid(symbol: string): Promise<ReferenceMid | null> {
+    const book = await this.book(symbol)
+    if (book === null) return null
+    const bestBid = book.bids[0]?.price
+    const bestAsk = book.asks[0]?.price
+    const mid = bookMid(book)
+    if (mid === null || bestBid === undefined || bestAsk === undefined) return null
+    return {
+      venueId: this.venueId,
+      coin: comparisonCoin(symbol),
+      mid,
+      bestBid,
+      bestAsk,
+      displayedSpreadBps: ((bestAsk - bestBid) / mid) * 10_000,
     }
   }
 
