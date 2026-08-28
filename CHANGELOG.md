@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Added `gryps_indicative_quote`: an indicative, non-firm execution estimate
+  for one clip (oracle mid, estimated entry price, base quantity, all-in cost
+  model with provenance). The public engine API exposes no quote, estimate, or
+  preview endpoint (surface probed 2026-08-28: GET candidates 404; POST
+  `/order`, `/leverage`, `/withdraw` exist but nothing quote-shaped), so the
+  response is derived from oracle price plus measured friction and says so in
+  `quoteBasis` and `engineQuoteSurface`. When the engine ships a real quote
+  surface, this tool's basis flips to venue-quoted without changing its
+  contract. Test suite grew from 50 to 54.
+
 ## Unreleased (0.2.0-alpha.1)
 
 Consolidates the decision layer from `@gryps/agent-core` into the public

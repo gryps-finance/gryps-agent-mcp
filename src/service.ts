@@ -304,6 +304,97 @@ export class PublicReadService {
     )
   }
 
+  async indicativeQuote(input: { symbol: string; side: 'long' | 'short'; notionalUsd: number }) {
+    const market = await this.resolveSymbol(input.symbol)
+    const [prices, sample] = await Promise.all([this.client.prices(), this.friction.sample(market.symbol)])
+    const price = prices.find((candidate) => normalise(candidate.symbol) === normalise(market.symbol))
+
+    const engineQuoteSurface = {
+      status: 'absent' as const,
+      note:
+        'The public Gryps engine API exposes no quote, estimate, or preview endpoint ' +
+        '(surface last probed 2026-08-28). This response is derived by this server, not quoted by the venue.',
+    }
+    const sources = [`${this.client.apiSource}/prices`, `${this.client.apiSource}/risk-config`]
+
+    if (!price) {
+      return envelope(
+        {
+          symbol: market.symbol,
+          side: input.side,
+          notionalUsd: input.notionalUsd,
+          quoteStatus: 'PRICE_UNAVAILABLE' as const,
+          firm: false,
+          quoteBasis: 'derived_from_oracle_price_and_friction_model' as const,
+          engineQuoteSurface,
+          oracleMid: null,
+          estimate: null,
+          provenance: {
+            feeBasis: sample.feeBasis,
+            spreadBasis: sample.spreadBasis,
+            tierLevel: sample.tierLevel,
+            isLowerBound: sample.isLowerBound,
+            note: sample.basisNote,
+          },
+        },
+        sources,
+        [
+          'The engine listed this market but returned no current price record, so no indicative estimate can be derived.',
+        ],
+      )
+    }
+
+    const midUsd = Number(price.price) / PRICE_SCALE
+    const perSideFeeBps = sample.quote.protocolFeeBps / 2
+    const openLegBps = perSideFeeBps + sample.quote.openSpreadBps
+    const sideSign = input.side === 'long' ? 1 : -1
+    const estimatedEntryPriceUsd = midUsd * (1 + (sideSign * sample.quote.openSpreadBps) / 10_000)
+
+    return envelope(
+      {
+        symbol: market.symbol,
+        side: input.side,
+        notionalUsd: input.notionalUsd,
+        quoteStatus: 'derived' as const,
+        firm: false,
+        quoteBasis: 'derived_from_oracle_price_and_friction_model' as const,
+        engineQuoteSurface,
+        oracleMid: {
+          usd: midUsd,
+          raw: price.price,
+          scale: PRICE_SCALE,
+          observedAt: new Date(price.timestamp).toISOString(),
+        },
+        estimate: {
+          estimatedEntryPriceUsd,
+          baseQuantity: input.notionalUsd / midUsd,
+          quantityPrecision: market.quantityPrecision,
+          openLegBps,
+          roundTripBps: sample.quote.roundTripBps,
+          breakEvenEdgeBps: breakEvenEdgeBps(sample.quote),
+          openCostUsd: (input.notionalUsd * openLegBps) / 10_000,
+          roundTripCostUsd: (input.notionalUsd * sample.quote.roundTripBps) / 10_000,
+        },
+        provenance: {
+          feeBasis: sample.feeBasis,
+          spreadBasis: sample.spreadBasis,
+          tierLevel: sample.tierLevel,
+          isLowerBound: sample.isLowerBound,
+          note: sample.basisNote,
+        },
+      },
+      sources,
+      [
+        ...sample.limitations,
+        'This is a cost model, not a tradable quote. Executable price and size are unknown until the engine exposes a quote surface.',
+        'Base quantity is unrounded; the engine may enforce the stated quantity precision.',
+        ...(sample.isLowerBound
+          ? ['Spread is unmeasured, so the estimated entry price equals the oracle mid and understates real entry cost.']
+          : []),
+      ],
+    )
+  }
+
   async venueStatus() {
     const [health, config, markets] = await Promise.all([
       this.client.health(),

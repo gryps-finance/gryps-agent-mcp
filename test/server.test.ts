@@ -114,6 +114,30 @@ test('refuses to count correlated signals as independent confirmations over the 
   await client.close()
 })
 
+test('serves an indicative quote over the wire, labeled non-firm and derived', async () => {
+  const { client } = await connectedClient()
+  const response = await client.callTool({
+    name: 'gryps_indicative_quote',
+    arguments: { symbol: 'BTC', side: 'long', notionalUsd: 10_000 },
+  })
+  assert.notEqual(response.isError, true)
+  const payload = response.structuredContent as {
+    data: {
+      firm: boolean
+      quoteStatus: string
+      engineQuoteSurface: { status: string }
+      estimate: { roundTripCostUsd: number }
+    }
+    meta: { limitations: string[] }
+  }
+  assert.equal(payload.data.firm, false)
+  assert.equal(payload.data.quoteStatus, 'derived')
+  assert.equal(payload.data.engineQuoteSurface.status, 'absent')
+  assert.equal(payload.data.estimate.roundTripCostUsd, 24)
+  assert.match(payload.meta.limitations.join(' '), /cost model, not a tradable quote/)
+  await client.close()
+})
+
 test('maps an unavailable upstream to a sanitised upstream_unavailable envelope', async () => {
   const failingFetch: typeof fetch = async () => {
     throw new Error('connect ECONNREFUSED 10.0.0.7')

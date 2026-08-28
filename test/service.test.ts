@@ -101,3 +101,50 @@ test('labels fee basis and spread limitation explicitly', async () => {
   assert.equal(response.data.feeBasisStatus, 'unverified_per_side_or_round_trip')
   assert.match(response.meta.limitations.join(' '), /Spread is not included/)
 })
+
+test('derives an indicative quote labeled as non-firm with an absent engine quote surface', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.indicativeQuote({ symbol: 'BTC', side: 'long', notionalUsd: 10_000 })
+  assert.equal(response.data.quoteStatus, 'derived')
+  assert.equal(response.data.firm, false)
+  assert.equal(response.data.quoteBasis, 'derived_from_oracle_price_and_friction_model')
+  assert.equal(response.data.engineQuoteSurface.status, 'absent')
+  assert.equal(response.data.oracleMid?.usd, 79_620.6)
+  assert.equal(response.data.estimate?.estimatedEntryPriceUsd, 79_620.6)
+  assert.equal(response.data.estimate?.openLegBps, 12)
+  assert.equal(response.data.estimate?.roundTripBps, 24)
+  assert.equal(response.data.estimate?.breakEvenEdgeBps, 36)
+  assert.equal(response.data.estimate?.openCostUsd, 12)
+  assert.equal(response.data.estimate?.roundTripCostUsd, 24)
+  assert.equal(response.data.provenance?.isLowerBound, true)
+  assert.match(response.meta.limitations.join(' '), /cost model, not a tradable quote/)
+  assert.match(response.meta.limitations.join(' '), /understates real entry cost/)
+})
+
+test('indicative quote shifts entry price only when spread is operator-measured', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+    { spreadBpsPerSide: 5 },
+  )
+  const response = await service.indicativeQuote({ symbol: 'BTC', side: 'short', notionalUsd: 10_000 })
+  assert.equal(response.data.estimate?.estimatedEntryPriceUsd, 79_620.6 * (1 - 5 / 10_000))
+  assert.equal(response.data.estimate?.openLegBps, 17)
+  assert.equal(response.data.estimate?.roundTripBps, 34)
+  assert.equal(response.data.provenance?.isLowerBound, false)
+})
+
+test('indicative quote reports PRICE_UNAVAILABLE instead of inventing an estimate', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({
+      config: testConfig,
+      fetcher: fixtureFetch({ '/api/v1/prices': { prices: [] } }),
+    }),
+  )
+  const response = await service.indicativeQuote({ symbol: 'BTC', side: 'long', notionalUsd: 10_000 })
+  assert.equal(response.data.quoteStatus, 'PRICE_UNAVAILABLE')
+  assert.equal(response.data.estimate, null)
+  assert.equal(response.data.firm, false)
+  assert.match(response.meta.limitations.join(' '), /no current price record/i)
+})

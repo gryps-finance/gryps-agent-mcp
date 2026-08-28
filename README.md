@@ -56,6 +56,7 @@ Then ask your client:
 | `gryps_edge_check` | Cost-gate a claimed edge from any upstream signal source. Answers whether the claimed magnitude survives execution, never whether the signal is true. |
 | `gryps_signal_stack` | Combine several agreeing signals honestly. Prevents correlated sources from being counted as independent confirmations. |
 | `gryps_route_compare` | Compare round-trip cost on Gryps against a public order-book venue priced by walking its live displayed depth. |
+| `gryps_indicative_quote` | An indicative, non-firm execution estimate for one clip: oracle mid, estimated entry, and the all-in cost model. Derived, and labeled as such: the engine exposes no quote surface. |
 | `gryps_list_markets` | Browse the live v2 market catalogue with bounded search and pagination. |
 | `gryps_get_market` | Resolve one exact symbol or unique base asset and return live price and leverage limits. |
 | `gryps_get_fee_schedule` | The engine-reported fee tier ladder. |

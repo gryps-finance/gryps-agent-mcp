@@ -174,5 +174,21 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     ({ symbol, side, notionalUsd }) => safely(() => service.routeCompare({ symbol, side, notionalUsd })),
   )
 
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[8],
+    {
+      title: 'Get an indicative Gryps execution estimate',
+      description:
+        'Produce an indicative, non-firm execution estimate for one clip: oracle mid, estimated entry price, base quantity, and the all-in cost model with full provenance. The engine exposes no quote surface, so this is derived from the live oracle price plus measured friction and is labeled as such. It is a cost model, never a tradable quote.',
+      inputSchema: {
+        symbol: z.string().trim().min(1).max(40),
+        side: z.enum(['long', 'short']).default('long'),
+        notionalUsd: z.number().positive().max(1_000_000_000).describe('Clip size in USD.'),
+      },
+      annotations,
+    },
+    ({ symbol, side, notionalUsd }) => safely(() => service.indicativeQuote({ symbol, side, notionalUsd })),
+  )
+
   return server
 }

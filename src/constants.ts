@@ -47,6 +47,7 @@ export const PUBLIC_TOOL_NAMES = [
   'gryps_edge_check',
   'gryps_signal_stack',
   'gryps_route_compare',
+  'gryps_indicative_quote',
 ] as const
 
 export type PublicToolName = (typeof PUBLIC_TOOL_NAMES)[number]

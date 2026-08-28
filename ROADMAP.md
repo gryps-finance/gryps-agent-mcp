@@ -56,8 +56,15 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 ## 3. Data surface expansion (still read-only)
 
 - [ ] Candles/OHLCV, funding, and open-interest tools if and when the v2 API exposes them.
-- [ ] RFQ quote-read tool (indicative quotes) — the venue is RFQ-based, so this is
+- [~] RFQ quote-read tool (indicative quotes) — the venue is RFQ-based, so this is
       the honest answer to "is there executable liquidity", which the market list is not.
+      2026-08-28: the public engine API exposes no quote, estimate, or preview
+      endpoint (GET candidates 404; POST `/order`, `/leverage`, `/withdraw` exist
+      but nothing quote-shaped). Shipped `gryps_indicative_quote` as the derived
+      stand-in: oracle mid plus the friction model, labeled non-firm with
+      `engineQuoteSurface: absent`. The true venue-quoted read stays open and is
+      blocked upstream; when the engine ships a quote surface the tool's basis
+      flips without changing its contract.
 - [ ] MCP resources for static venue documentation (fee policy, settlement identity).
 - [ ] Streaming price updates as MCP resource subscriptions if the backend offers
       a websocket; otherwise document polling guidance.
