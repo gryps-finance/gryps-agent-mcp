@@ -26,6 +26,7 @@
   "files": [
     "dist",
     "README.md",
+    "CONNECT.md",
     "SECURITY.md",
     "ARCHITECTURE.md",
     "RELEASE.md",

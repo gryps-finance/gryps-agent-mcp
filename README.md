@@ -15,7 +15,16 @@ is built so that a routine upgrade can never quietly change that.
 
 ## Quick start
 
-Requires Node.js 22.13 or later.
+Requires Node.js 22.13 or later. See [CONNECT.md](CONNECT.md) for the full
+two-minute setup, including client configuration and troubleshooting.
+
+**Not yet on npm.** Until the package is published, install from source:
+
+```bash
+npx -y github:gryps-finance/gryps-agent-mcp
+```
+
+Once published, the install becomes:
 
 ```bash
 npx -y '@gryps.finance/agent-mcp@alpha'
@@ -137,7 +146,8 @@ endpoint, the friction floor, the cost gate, and venue comparison, because it
 requires network access. CI runs the same chain on Linux and Windows plus a
 nightly live-contract check for upstream drift.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the capability split,
+See [CONNECT.md](CONNECT.md) to connect an agent in two minutes,
+[ARCHITECTURE.md](ARCHITECTURE.md) for the capability split,
 [SECURITY.md](SECURITY.md) for the defensive boundary and reporting path,
 [RELEASE.md](RELEASE.md) for the publication gate,
 [CONTRIBUTING.md](CONTRIBUTING.md) for the ground rules, and
