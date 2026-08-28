@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Added `gryps_paper_session`: rehearse trades against live oracle prices with
+  zero capital. Open, close, status, and reset actions; entries and exits mark
+  at the oracle mid with real per-leg friction charged, and every close
+  decomposes the result into price move versus friction paid, with a narration
+  that names the venue lesson when friction eats a favourable move. Unrealized
+  status figures already charge the pending close, so a flat price shows as a
+  small loss, which is the honest number. Positions are bookkeeping in the
+  server process only: no order exists anywhere, and state dies with the
+  process. Bounded at 20 open positions and 200 retained closes. Test suite
+  grew from 84 to 95.
+- Added the `invalid_request` error code for malformed tool arguments that are
+  not configuration errors.
+
 ## Unreleased (0.2.0-alpha.3)
 
 - Added `gryps_next_step`: journey-aware onboarding. On a fresh install it

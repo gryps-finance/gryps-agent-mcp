@@ -10,6 +10,13 @@ import {
   type StackedSignal,
 } from './analysis.js'
 import { ComparisonVenue, compareRoutes, type VenueQuote } from './router.js'
+import {
+  PaperBook,
+  closeNarration,
+  type ClosedPaperPosition,
+  type PaperPosition,
+  type PaperTotals,
+} from './paper.js'
 import { nextStep, queryLibrary, type LibraryFilter } from './library.js'
 import type { MarketRecord } from './schemas.js'
 
@@ -142,9 +149,38 @@ export interface PublicReadServiceOptions {
   fetcher?: typeof fetch
 }
 
+export interface PaperSessionInput {
+  action: 'open' | 'close' | 'status' | 'reset'
+  symbol?: string | undefined
+  side?: 'long' | 'short' | undefined
+  notionalUsd?: number | undefined
+  positionId?: string | undefined
+}
+
+export interface PaperMark {
+  priceUsd: number
+  observedAt: string
+  unrealizedPricePnlUsd: number
+  pendingCloseFrictionUsd: number
+  unrealizedNetPnlUsd: number
+}
+
+export interface PaperSessionResult {
+  action: 'open' | 'close' | 'status' | 'reset'
+  position?: PaperPosition | ClosedPaperPosition
+  narration?: string
+  openPositions?: Array<PaperPosition & { markStatus: 'marked' | 'PRICE_UNAVAILABLE'; mark: PaperMark | null }>
+  closedPositions?: ClosedPaperPosition[]
+  totals: PaperTotals
+  openDiscarded?: number
+  closedDiscarded?: number
+  frictionProvenance?: string
+}
+
 export class PublicReadService {
   private readonly friction: FrictionService
   private readonly comparison: ComparisonVenue | null
+  private readonly paper = new PaperBook()
 
   constructor(
     private readonly client: EngineReadClient,
@@ -575,6 +611,134 @@ export class PublicReadService {
           : []),
         ...(referenceStatus === 'reference_unavailable'
           ? ['The reference venue was unreachable. Only the Gryps oracle side of this read is available.']
+          : []),
+      ],
+    )
+  }
+
+  async paperSession(input: PaperSessionInput): Promise<SuccessEnvelope<PaperSessionResult>> {
+    const boundary = [
+      'Paper positions are bookkeeping in this server process only. No order exists anywhere.',
+      'Session state is held in memory and is lost when the server process ends.',
+      'Entries and exits are marked at the oracle mid, which is not an executable price.',
+    ]
+    const sources = [`${this.client.apiSource}/prices`, `${this.client.apiSource}/risk-config`]
+
+    if (input.action === 'reset') {
+      const discarded = this.paper.reset()
+      return envelope({ action: 'reset' as const, ...discarded, totals: this.paper.totals() }, [], boundary)
+    }
+
+    if (input.action === 'status') {
+      const prices = await this.client.prices()
+      const openPositions = await Promise.all(
+        this.paper.openPositions().map(async (position) => {
+          const price = prices.find((candidate) => normalise(candidate.symbol) === normalise(position.symbol))
+          if (!price) {
+            return { ...position, markStatus: 'PRICE_UNAVAILABLE' as const, mark: null }
+          }
+          const sample = await this.friction.sample(position.symbol)
+          const markPriceUsd = Number(price.price) / PRICE_SCALE
+          const sideSign = position.side === 'long' ? 1 : -1
+          const unrealizedPricePnlUsd =
+            sideSign * ((markPriceUsd - position.entryPriceUsd) / position.entryPriceUsd) * position.notionalUsd
+          const closeFrictionBps = sample.quote.protocolFeeBps / 2 + sample.quote.closeSpreadBps
+          const pendingCloseFrictionUsd = (position.notionalUsd * closeFrictionBps) / 10_000
+          return {
+            ...position,
+            markStatus: 'marked' as const,
+            mark: {
+              priceUsd: markPriceUsd,
+              observedAt: new Date(price.timestamp).toISOString(),
+              unrealizedPricePnlUsd,
+              pendingCloseFrictionUsd,
+              unrealizedNetPnlUsd: unrealizedPricePnlUsd - position.openFrictionUsd - pendingCloseFrictionUsd,
+            },
+          }
+        }),
+      )
+      return envelope(
+        { action: 'status' as const, openPositions, closedPositions: this.paper.closed(), totals: this.paper.totals() },
+        sources,
+        [
+          ...boundary,
+          'Unrealized figures already charge the friction a close would cost, so a flat price shows as a small loss. That is the honest number.',
+        ],
+      )
+    }
+
+    if (input.action === 'open') {
+      if (!input.symbol || !input.side || typeof input.notionalUsd !== 'number') {
+        throw new PublicMcpError('invalid_request', 'Action "open" requires symbol, side, and notionalUsd.')
+      }
+      const market = await this.resolveSymbol(input.symbol)
+      const [prices, sample] = await Promise.all([this.client.prices(), this.friction.sample(market.symbol)])
+      const price = prices.find((candidate) => normalise(candidate.symbol) === normalise(market.symbol))
+      if (!price) {
+        throw new PublicMcpError(
+          'not_found',
+          `The engine returned no current price for ${market.symbol}, so a paper position cannot be opened.`,
+        )
+      }
+      const openFrictionBps = sample.quote.protocolFeeBps / 2 + sample.quote.openSpreadBps
+      const position = this.paper.open({
+        symbol: market.symbol,
+        side: input.side,
+        notionalUsd: input.notionalUsd,
+        entryPriceUsd: Number(price.price) / PRICE_SCALE,
+        entryAtIso: new Date(price.timestamp).toISOString(),
+        openFrictionBps,
+        openFrictionUsd: (input.notionalUsd * openFrictionBps) / 10_000,
+      })
+      return envelope(
+        {
+          action: 'open' as const,
+          position,
+          totals: this.paper.totals(),
+          frictionProvenance: sample.basisNote,
+        },
+        sources,
+        [...boundary, ...sample.limitations],
+      )
+    }
+
+    if (!input.positionId) {
+      throw new PublicMcpError('invalid_request', 'Action "close" requires positionId.')
+    }
+    const open = this.paper.openPositions().find((position) => position.id === input.positionId)
+    if (!open) {
+      throw new PublicMcpError(
+        'not_found',
+        `No open paper position "${input.positionId}". Use action "status" to list open positions.`,
+      )
+    }
+    const [prices, sample] = await Promise.all([this.client.prices(), this.friction.sample(open.symbol)])
+    const price = prices.find((candidate) => normalise(candidate.symbol) === normalise(open.symbol))
+    if (!price) {
+      throw new PublicMcpError(
+        'not_found',
+        `The engine returned no current price for ${open.symbol}. The position stays open; try again when a price is available.`,
+      )
+    }
+    const closed = this.paper.close(input.positionId, {
+      exitPriceUsd: Number(price.price) / PRICE_SCALE,
+      closeFrictionBps: sample.quote.protocolFeeBps / 2 + sample.quote.closeSpreadBps,
+      closedAtIso: new Date(price.timestamp).toISOString(),
+    })
+    return envelope(
+      {
+        action: 'close' as const,
+        position: closed,
+        narration: closeNarration(closed),
+        totals: this.paper.totals(),
+        frictionProvenance: sample.basisNote,
+      },
+      sources,
+      [
+        ...boundary,
+        ...sample.limitations,
+        ...(sample.isLowerBound
+          ? ['Friction charged here is a lower bound, so a real result would be worse than this rehearsal shows.']
           : []),
       ],
     )

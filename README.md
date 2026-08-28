@@ -57,6 +57,7 @@ Then ask your client:
 | `gryps_get_fee_schedule` | The engine-reported fee tier ladder. |
 | `gryps_next_step` | Ask what to do next. On a fresh install it returns one starting point rather than a catalogue, then routes the journey from there. |
 | `gryps_prompt_library` | Browse 25 staged prompts by journey stage, experience level, purpose or free text. Each says what it does and why it matters. |
+| `gryps_paper_session` | Rehearse trades against live prices with zero capital. Every close decomposes the result into price move versus friction paid. No order exists anywhere. |
 | `gryps_venue_status` | API health, build version, settlement chain, and contract. |
 
 All tools are annotated read-only and non-destructive. Every response uses a

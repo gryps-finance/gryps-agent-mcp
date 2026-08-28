@@ -25,8 +25,11 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 - [x] Venue cost comparison by live book walk, including depth-exhaustion honesty.
 - [x] Market-count claim gated behind an unreconciled flag.
 - [ ] MCP `outputSchema` on every tool so clients can validate structured content.
-- [ ] `gryps_paper_session`: paper rehearsal of a mandate. Deferred from the
-      0.2 consolidation because it needs a price-stream contract first.
+- [x] `gryps_paper_session`: paper rehearsal against live oracle prices with
+      real friction charged per leg and every close decomposed into price move
+      versus friction paid. The price-stream contract it waited for is
+      satisfied v1 by polling the oracle read; a streaming upgrade follows the
+      websocket item in section 3 if the backend ships one.
 - [ ] `gryps_prompt_library`: the open prompt manifest. Deferred pending the
       entitlement split between open and paid prompts.
 - [ ] Measure spread on v2 so the friction floor stops being a lower bound.

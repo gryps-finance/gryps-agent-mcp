@@ -252,5 +252,23 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     (input) => safely(async () => service.promptLibrary(input)),
   )
 
+  server.registerTool(
+    PUBLIC_TOOL_NAMES[12],
+    {
+      title: 'Run a paper trading session',
+      description:
+        'Rehearse trades against live prices with zero capital. Open and close paper positions marked at the oracle mid with real friction charged per leg; every close decomposes the result into price move versus friction paid. Positions are bookkeeping in this server process only: no order exists anywhere, and state is lost when the process ends. Actions: open (symbol, side, notionalUsd), close (positionId), status, reset.',
+      inputSchema: {
+        action: z.enum(['open', 'close', 'status', 'reset']),
+        symbol: z.string().trim().min(1).max(40).optional().describe('Required for action "open".'),
+        side: z.enum(['long', 'short']).optional().describe('Required for action "open".'),
+        notionalUsd: z.number().positive().max(1_000_000_000).optional().describe('Clip size in USD. Required for action "open".'),
+        positionId: z.string().trim().min(1).max(40).optional().describe('Required for action "close".'),
+      },
+      annotations,
+    },
+    (input) => safely(() => service.paperSession(input)),
+  )
+
   return server
 }

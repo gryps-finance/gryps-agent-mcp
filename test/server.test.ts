@@ -195,3 +195,26 @@ test('onboarding works with no network, because the library is embedded', async 
   assert.notEqual(response.isError, true, 'onboarding must survive an unreachable venue')
   await client.close()
 })
+
+test('runs a paper round trip over the wire and reports the friction lesson', async () => {
+  const { client } = await connectedClient()
+  const opened = await client.callTool({
+    name: 'gryps_paper_session',
+    arguments: { action: 'open', symbol: 'BTC', side: 'long', notionalUsd: 10_000 },
+  })
+  assert.notEqual(opened.isError, true)
+  const openPayload = opened.structuredContent as { data: { position: { id: string } } }
+  const closed = await client.callTool({
+    name: 'gryps_paper_session',
+    arguments: { action: 'close', positionId: openPayload.data.position.id },
+  })
+  assert.notEqual(closed.isError, true)
+  const closePayload = closed.structuredContent as {
+    data: { position: { netPnlUsd: number }; narration: string }
+    meta: { limitations: string[] }
+  }
+  assert.equal(closePayload.data.position.netPnlUsd, -24)
+  assert.match(closePayload.data.narration, /friction/i)
+  assert.match(closePayload.meta.limitations.join(' '), /No order exists anywhere/)
+  await client.close()
+})

@@ -3,6 +3,7 @@ import { RESPONSE_SCHEMA_VERSION } from './constants.js'
 
 export type PublicErrorCode =
   | 'invalid_configuration'
+  | 'invalid_request'
   | 'not_found'
   | 'ambiguous_symbol'
   | 'upstream_unavailable'
