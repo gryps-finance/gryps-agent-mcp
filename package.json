@@ -1,0 +1,73 @@
+{
+  "name": "@gryps/agent-mcp",
+  "version": "0.1.0-alpha.1",
+  "description": "Public read-only MCP server for live Gryps v2 market and venue data.",
+  "type": "module",
+  "main": "dist/public.js",
+  "types": "dist/public.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/public.d.ts",
+      "import": "./dist/public.js"
+    }
+  },
+  "bin": {
+    "gryps-agent-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SECURITY.md",
+    "ARCHITECTURE.md",
+    "BACKEND-INTEGRATION.md",
+    "RELEASE.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "build:internal": "tsc -p tsconfig.internal.json",
+    "typecheck:internal": "tsc -p tsconfig.internal.json --noEmit",
+    "test:internal": "tsx --test internal-test/*.test.ts",
+    "verify:internal": "npm run typecheck:internal && npm run test:internal && npm run build:internal",
+    "smoke:internal": "node scripts/smoke-internal.mjs",
+    "smoke:mcp": "node scripts/smoke-stdio.mjs",
+    "smoke:live": "node scripts/smoke-live.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "verify:clean-install": "node scripts/verify-clean-install.mjs",
+    "verify:release": "npm run clean && npm run typecheck && npm test && npm run build && npm run smoke:mcp && npm run verify:package && npm run verify:clean-install",
+    "start": "node dist/index.js",
+    "start:internal": "node internal-dist/internal-src/index.js",
+    "dev": "tsx src/index.ts",
+    "dev:internal": "tsx internal-src/index.ts",
+    "prepack": "npm run clean && npm run build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": [
+    "gryps",
+    "mcp",
+    "model-context-protocol",
+    "trading",
+    "market-data",
+    "read-only"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "tsx": "4.23.12",
+    "typescript": "7.0.2"
+  }
+}
