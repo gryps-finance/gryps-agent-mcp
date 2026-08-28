@@ -30,8 +30,14 @@ const annotations = {
   openWorldHint: true,
 } as const
 
-export function createPublicServer(config: PublicMcpConfig): McpServer {
-  const service = new PublicReadService(new EngineReadClient({ config }))
+export interface PublicServerOptions {
+  fetcher?: typeof fetch
+  nowMs?: () => number
+  retryDelayMs?: number
+}
+
+export function createPublicServer(config: PublicMcpConfig, options: PublicServerOptions = {}): McpServer {
+  const service = new PublicReadService(new EngineReadClient({ config, ...options }))
   const server = new McpServer({ name: SERVER_NAME, version: PACKAGE_VERSION })
 
   server.registerTool(

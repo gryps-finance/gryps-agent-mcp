@@ -10,7 +10,7 @@ export {
   RESPONSE_SCHEMA_VERSION,
 } from './constants.js'
 export { PublicMcpError, type PublicErrorCode } from './errors.js'
-export { createPublicServer } from './server.js'
+export { createPublicServer, type PublicServerOptions } from './server.js'
 export { PublicReadService, resolveMarket, type SuccessEnvelope } from './service.js'
 export type {
   ConfigResponse,

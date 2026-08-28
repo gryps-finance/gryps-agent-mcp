@@ -16,6 +16,11 @@ interface CacheEntry {
   value: unknown
 }
 
+const CACHE_MAX_ENTRIES = 64
+const MAX_UPSTREAM_RESPONSE_BYTES = 5_000_000
+const MAX_PAGE_LIMIT = 100
+const MAX_PAGE_OFFSET = 100_000
+
 export class ObserverUpstreamError extends Error {
   constructor(readonly code: 'upstream_unavailable' | 'upstream_schema_mismatch', message: string) {
     super(message)
@@ -23,8 +28,16 @@ export class ObserverUpstreamError extends Error {
   }
 }
 
+function boundedPage(limit: number, offset: number): { limit: number; offset: number } {
+  return {
+    limit: Math.min(Math.max(Math.trunc(limit), 1), MAX_PAGE_LIMIT),
+    offset: Math.min(Math.max(Math.trunc(offset), 0), MAX_PAGE_OFFSET),
+  }
+}
+
 export class AccountReadClient {
   private readonly cache = new Map<string, CacheEntry>()
+  private readonly inflight = new Map<string, Promise<unknown>>()
 
   constructor(
     private readonly config: ObserverConfig,
@@ -37,6 +50,31 @@ export class AccountReadClient {
     const cached = this.cache.get(url)
     if (cached && cached.expiresAt > this.nowMs()) return cached.value as T
 
+    const pending = this.inflight.get(url)
+    if (pending) return pending as Promise<T>
+
+    const request = (async () => {
+      const parsed = schema.safeParse(await this.fetchJson(url))
+      if (!parsed.success) {
+        throw new ObserverUpstreamError(
+          'upstream_schema_mismatch',
+          'The Gryps account endpoint returned an unexpected response shape.',
+        )
+      }
+      this.cache.set(url, { value: parsed.data, expiresAt: this.nowMs() + this.config.cacheTtlMs })
+      while (this.cache.size > CACHE_MAX_ENTRIES) {
+        const oldest = this.cache.keys().next().value
+        if (oldest === undefined) break
+        this.cache.delete(oldest)
+      }
+      return parsed.data
+    })().finally(() => this.inflight.delete(url))
+
+    this.inflight.set(url, request)
+    return request as Promise<T>
+  }
+
+  private async fetchJson(url: string): Promise<unknown> {
     let response: Response
     try {
       response = await this.fetcher(url, {
@@ -55,21 +93,20 @@ export class AccountReadClient {
       )
     }
 
-    let body: unknown
+    let text: string
     try {
-      body = await response.json()
+      text = await response.text()
+    } catch {
+      throw new ObserverUpstreamError('upstream_unavailable', 'The Gryps account endpoint closed the connection early.')
+    }
+    if (text.length > MAX_UPSTREAM_RESPONSE_BYTES) {
+      throw new ObserverUpstreamError('upstream_schema_mismatch', 'The Gryps account endpoint returned an oversized response.')
+    }
+    try {
+      return JSON.parse(text) as unknown
     } catch {
       throw new ObserverUpstreamError('upstream_schema_mismatch', 'The Gryps account endpoint returned invalid JSON.')
     }
-    const parsed = schema.safeParse(body)
-    if (!parsed.success) {
-      throw new ObserverUpstreamError(
-        'upstream_schema_mismatch',
-        'The Gryps account endpoint returned an unexpected response shape.',
-      )
-    }
-    this.cache.set(url, { value: parsed.data, expiresAt: this.nowMs() + this.config.cacheTtlMs })
-    return parsed.data
   }
 
   snapshot(): Promise<AccountSnapshot> {
@@ -81,13 +118,18 @@ export class AccountReadClient {
   }
 
   orders(limit: number, offset: number): Promise<OrdersPage> {
+    const page = boundedPage(limit, offset)
     return this.get(
-      `/user/${this.config.accountAddress}/orders/history?limit=${limit}&offset=${offset}`,
+      `/user/${this.config.accountAddress}/orders/history?limit=${page.limit}&offset=${page.offset}`,
       ordersSchema,
     )
   }
 
   trades(limit: number, offset: number): Promise<TradesPage> {
-    return this.get(`/user/${this.config.accountAddress}/trades?limit=${limit}&offset=${offset}`, tradesSchema)
+    const page = boundedPage(limit, offset)
+    return this.get(
+      `/user/${this.config.accountAddress}/trades?limit=${page.limit}&offset=${page.offset}`,
+      tradesSchema,
+    )
   }
 }
