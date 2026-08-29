@@ -49,6 +49,9 @@ Then ask your client:
 | `gryps_friction_floor` | The round-trip cost a trade must beat, decomposed into fees and spread with full provenance. The number that decides whether a trade is worth making. |
 | `gryps_edge_check` | Cost-gate a claimed edge from any upstream signal source. Answers whether the claimed magnitude survives execution, never whether the signal is true. |
 | `gryps_signal_stack` | Combine several agreeing signals honestly. Folds repeats of one source into a single signal, treats near-identical source names as one feed, and prevents correlated families from being counted as independent confirmations. |
+| `gryps_margin_profile` | Where the position gets liquidated. Turns the venue published maintenance-margin ladder into the bracket, margin, leverage ceiling, and adverse move a size can absorb — and whether it survives long enough for the expected move to arrive. |
+| `gryps_position_size` | How large. Bounded by the cost gate, the risk budget, the venue brackets, and survivability, reporting the largest size every constraint allows and naming the one that binds. |
+| `gryps_funding_cost` | What holding costs, beside what entering costs. Over a long hold, carry can exceed the round trip entirely. |
 | `gryps_route_compare` | Compare round-trip cost on Gryps against a public order-book venue priced by walking its live displayed depth. |
 | `gryps_indicative_quote` | An indicative, non-firm execution estimate for one clip: oracle mid, estimated entry, and the all-in cost model. Derived, and labeled as such: the engine exposes no quote surface. |
 | `gryps_reference_price` | The live Gryps oracle price next to an external fair-value mid, with divergence in bps. The anchor for oracle sanity checks and paper-session pricing. |
@@ -76,6 +79,23 @@ these tools.
 The seven journey prompts are also exposed as native MCP prompts, so clients
 that render prompts surface the guided path in their own interface. A tool has
 to be invoked; a prompt is presented.
+
+## Cost is not the only thing that stops a trade
+
+A trade can clear its cost and still be a bad trade, and the venue publishes
+enough to prove it. Every `risk-config` read returns a full maintenance-margin
+ladder, so the same call that prices friction can also say where the position
+stops existing.
+
+On live BTC data, 150x leverage leaves roughly 27 basis points of room before
+liquidation, and round-trip friction is 24 of them. Three basis points of actual
+buffer, on a trade the cost gate alone would wave through. That is the gap
+`gryps_margin_profile` and `gryps_position_size` close: the first says where the
+position dies, the second says how large it can be before that becomes likely.
+
+`gryps_funding_cost` closes the other one. Friction is charged twice and then
+done; funding is charged the whole time the position is open. Holding a week can
+cost several times the round trip this package has been gating on.
 
 ## The four honesty rules
 

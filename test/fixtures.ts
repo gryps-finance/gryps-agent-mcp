@@ -64,6 +64,24 @@ export const fixtureBodies: Record<string, unknown> = {
       { symbol: 'PUMPBTCUSDT', price: '123456', timestamp: 1_787_915_570_000 },
     ],
   },
+  '/api/v1/market-data': {
+    markets: [
+      {
+        symbol: 'BTCUSDT',
+        fundingRate: '0.00010000',
+        nextFundingTime: 1_787_961_600_000,
+        updatedAt: 1_787_956_629_000,
+        markPrice: '79620.60',
+        volume24h: '1000000',
+      },
+      {
+        symbol: 'PUMPBTCUSDT',
+        fundingRate: '-0.00005000',
+        nextFundingTime: 1_787_961_600_000,
+        updatedAt: 1_787_956_629_000,
+      },
+    ],
+  },
   '/api/v1/risk-config': {
     symbols: {
       BTCUSDT: {

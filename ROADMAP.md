@@ -49,9 +49,20 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 - [ ] Resolve the fee direction with the protocol team. Until then every cost
       figure is an interval, and `gryps_route_compare` favouring Hyperliquid
       depends on which reading is correct.
-- [ ] Use `fundingRate` from the newly found `/api/v1/market-data` surface.
-      Funding is a real holding cost this package does not yet charge, and the
-      same response carries mark price and 24h volume.
+- [x] Use `fundingRate` from the `/api/v1/market-data` surface
+      (`gryps_funding_cost`). Carry is reported across candidate intervals and
+      added to round-trip friction for an all-in hold cost.
+- [x] Margin and liquidation arithmetic from the published bracket ladder
+      (`gryps_margin_profile`), including whether a position survives long
+      enough to reach the move it is waiting for.
+- [x] Position sizing bounded by cost, risk budget, venue brackets, and
+      survivability (`gryps_position_size`), naming the binding constraint.
+- [ ] Confirm the funding interval with the venue. The rate is published; the
+      period it is charged over is not, and one observation cannot infer it
+      because an eight-hour grid contains the four-hour and one-hour grids.
+      Until then carry is an interval, exactly like fee direction was.
+- [ ] Treat oracle-versus-reference divergence as a tradable signal rather than
+      only a sanity check. `gryps_reference_price` already computes it.
 - [ ] Structured stderr logging with `--log-level` (never stdout; stdio transport owns stdout).
 - [ ] Request correlation IDs threaded through envelopes and logs.
 - [ ] Circuit breaker + stale-while-revalidate cache so a flapping upstream degrades gracefully.

@@ -2,6 +2,36 @@
 
 ## 0.2.0-alpha.3 (unreleased)
 
+- Added `gryps_margin_profile`. Every `risk-config` read already returned a full
+  maintenance-margin ladder per symbol, which this package validated and threw
+  away. It now decodes the brackets and reports which one a size falls into, the
+  initial and maintenance margin required, the leverage ceiling that applies at
+  that size, and how far the price can move against the position before
+  liquidation, in basis points and in dollars. Supply a claimed edge and it also
+  reports whether the position survives long enough for that move to arrive.
+  On live BTC data, 150x leverage leaves about 27 bps of room and friction is 24
+  of them: a trade the cost gate alone would pass. Arithmetic on published
+  parameters, labelled as such — the venue liquidates, this only calculates.
+- Added `gryps_position_size`, which answers the question that follows "is this
+  worth trading". Bounded by four constraints — the cost gate, the caller's risk
+  budget, the venue bracket ceiling, and survivability — it returns the largest
+  size satisfying all of them and names the one that binds. A calculator over
+  supplied constraints, not a recommendation, and it sizes a claim without
+  checking whether the claim is true.
+- Added `gryps_funding_cost`. Friction is charged twice and then done; funding
+  is charged for as long as the position exists, so a signal with a one-day
+  horizon was being priced as if holding were free. Reports the live rate, the
+  per-event cost signed for the side held, and the all-in cost beside round-trip
+  friction. The engine publishes the rate but not the interval, so the hold cost
+  is reported across every interval venues actually use, and the all-in figure
+  takes the most expensive candidate until the interval is confirmed. One
+  timestamp cannot settle it: a stamp on an eight-hour grid also sits on the
+  four-hour and one-hour grids.
+- Added a client read for `/api/v1/market-data`, the surface found while probing
+  for a bid/ask book. It has no depth, but it carries funding, mark price, and
+  24h volume.
+- Test suite grew from 136 to 158. Eighteen tools.
+
 - Added gryps_measured_fees: reads the settlement contract event log from a
   public block explorer and reports the median fee real fills actually paid,
   rather than what the schedule advertises. Keyless and read-only.

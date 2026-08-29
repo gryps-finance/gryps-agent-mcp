@@ -121,6 +121,9 @@ from general knowledge instead of calling a tool, the server is not connected.
 | What do fills actually pay, not what is advertised? | `gryps_measured_fees` |
 | Is the venue healthy, and on which chain? | `gryps_venue_status` |
 | What is this coin called here? | `gryps_list_markets` |
+| Where does this position get liquidated? | `gryps_margin_profile` |
+| How big should this position be? | `gryps_position_size` |
+| What does it cost to hold this overnight? | `gryps_funding_cost` |
 | I just installed this. What do I do? | `gryps_next_step` |
 | What else can I ask, for my experience level? | `gryps_prompt_library` |
 | Can I rehearse a trade without risking anything? | `gryps_paper_session` |
@@ -158,6 +161,21 @@ entries and exits at the live oracle mid and charges real friction, but no order
 exists anywhere and the state dies with the server process. A flat price shows a
 small loss because the pending close is already charged. That is the honest
 number, and it is the point of rehearsing.
+
+## Cost, then size, then survival
+
+Three questions follow each other, and answering only the first is how a correct
+signal still loses money.
+
+1. Does the edge beat what the round trip costs? `gryps_edge_check`.
+2. How large can the position be, given the account, the venue brackets, and the
+   need to survive a move against it? `gryps_position_size`.
+3. Where does it get liquidated, and can the expected move arrive before that?
+   `gryps_margin_profile`.
+
+If the position will be held rather than flipped, `gryps_funding_cost` adds the
+carry. Over a long hold it can be larger than the entry cost the first question
+was about.
 
 ## Finding a market
 

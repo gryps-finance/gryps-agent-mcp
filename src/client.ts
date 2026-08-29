@@ -14,11 +14,13 @@ import {
   healthSchema,
   marketsResponseSchema,
   pricesResponseSchema,
+  marketDataResponseSchema,
   riskConfigSchema,
   type ConfigResponse,
   type HealthResponse,
   type MarketRecord,
   type PriceRecord,
+  type MarketDataRecord,
   type RiskConfig,
 } from './schemas.js'
 
@@ -168,6 +170,11 @@ export class EngineReadClient {
   async prices(): Promise<PriceRecord[]> {
     const response = await this.get(`${this.options.config.apiBase}/prices`, pricesResponseSchema)
     return response.prices
+  }
+
+  async marketData(): Promise<MarketDataRecord[]> {
+    const response = await this.get(`${this.options.config.apiBase}/market-data`, marketDataResponseSchema)
+    return Array.isArray(response) ? response : response.markets
   }
 
   async riskConfig(): Promise<RiskConfig> {

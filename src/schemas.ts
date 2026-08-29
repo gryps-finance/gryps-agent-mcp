@@ -47,6 +47,27 @@ export const pricesResponseSchema = z
   .object({ prices: z.array(priceSchema) })
   .strip()
 
+/**
+ * The market-data surface. Found while probing the engine for a bid/ask
+ * surface: it has no book, but it does carry the funding rate, which is the
+ * holding cost this package used to ignore.
+ */
+export const marketDataSchema = z
+  .object({
+    symbol: z.string().min(1),
+    fundingRate: z.union([z.string(), z.number()]),
+    nextFundingTime: z.number().int().min(1_577_836_800_000).max(4_102_444_800_000),
+    updatedAt: z.number().int().min(1_577_836_800_000).max(4_102_444_800_000),
+    markPrice: z.union([z.string(), z.number()]).optional(),
+    volume24h: z.union([z.string(), z.number()]).optional(),
+  })
+  .strip()
+
+export const marketDataResponseSchema = z.union([
+  z.array(marketDataSchema),
+  z.object({ markets: z.array(marketDataSchema) }).strip(),
+])
+
 export const maintenanceBracketSchema = z
   .object({
     maxNotional: z.string().regex(/^\d+$/),
@@ -84,4 +105,6 @@ export type MarketRecord = z.infer<typeof marketSchema>
 export type PriceRecord = z.infer<typeof priceSchema>
 export type RiskConfig = z.infer<typeof riskConfigSchema>
 export type SymbolRisk = z.infer<typeof symbolRiskSchema>
+export type MaintenanceBracket = z.infer<typeof maintenanceBracketSchema>
+export type MarketDataRecord = z.infer<typeof marketDataSchema>
 export type FeeTier = z.infer<typeof feeTierSchema>

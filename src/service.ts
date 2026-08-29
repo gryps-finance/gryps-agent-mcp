@@ -21,6 +21,9 @@ import {
 import { nextStep, queryLibrary, type LibraryFilter } from './library.js'
 import type { MarketRecord } from './schemas.js'
 import { expandQuery, matchesSubstring, nearestMarkets, normalise, relevanceRank } from './symbols.js'
+import { checkSurvival, marginProfile as computeMarginProfile } from './margin.js'
+import { sizePosition } from './sizing.js'
+import { allInCostBps, fundingCost } from './funding.js'
 
 interface EnvelopeMeta {
   fetchedAt: string
@@ -826,6 +829,187 @@ export class PublicReadService {
         ...sample.limitations,
         ...(sample.isLowerBound
           ? ['Friction charged here is a lower bound, so a real result would be worse than this rehearsal shows.']
+          : []),
+      ],
+    )
+  }
+
+  /**
+   * Where the position stops existing, and whether the move it is waiting for
+   * can arrive before that happens. The engine publishes a full maintenance
+   * margin ladder on every risk-config read; this turns it into the number a
+   * trader actually needs.
+   */
+  async marginProfile(input: {
+    symbol: string
+    notionalUsd: number
+    side: 'long' | 'short'
+    leverage?: number | undefined
+    claimedEdgeBps?: number | undefined
+  }) {
+    const market = await this.resolveSymbol(input.symbol)
+    const [prices, risk, sample] = await Promise.all([
+      this.client.prices(),
+      this.client.riskConfig(),
+      this.friction.sample(market.symbol),
+    ])
+
+    const marketRisk = risk.symbols[market.symbol]
+    if (!marketRisk) {
+      throw new PublicMcpError(
+        'not_found',
+        `The engine returned no risk configuration for ${market.symbol}, so margin terms cannot be read for it.`,
+      )
+    }
+
+    const price = prices.find((candidate) => normalise(candidate.symbol) === normalise(market.symbol))
+    const entryPriceUsd = price ? Number(price.price) / PRICE_SCALE : undefined
+    const profile = computeMarginProfile({
+      risk: marketRisk,
+      notionalUsd: input.notionalUsd,
+      side: input.side,
+      ...(input.leverage === undefined ? {} : { leverage: input.leverage }),
+      ...(entryPriceUsd === undefined ? {} : { entryPriceUsd }),
+    })
+
+    const survival =
+      input.claimedEdgeBps === undefined
+        ? null
+        : checkSurvival(profile, input.claimedEdgeBps, sample.quote.roundTripBps)
+
+    return envelope(
+      {
+        symbol: market.symbol,
+        ...profile,
+        priceStatus: price ? ('available' as const) : ('PRICE_UNAVAILABLE' as const),
+        survival,
+        frictionBps: sample.quote.roundTripBps,
+        provenance: provenanceOf(sample),
+      },
+      [`${this.client.apiSource}/risk-config`, `${this.client.apiSource}/prices`],
+      [
+        ...profile.notes,
+        ...sample.limitations,
+        ...(price
+          ? []
+          : ['No current price record was returned, so the liquidation price could not be expressed in dollars. The distance in basis points still holds.']),
+        ...(survival && !survival.edgeReachable
+          ? [
+              'The liquidation buffer is smaller than the move being waited for. Cost gating alone would have passed this trade; it is the position size and leverage that make it fragile.',
+            ]
+          : []),
+      ],
+    )
+  }
+
+  /**
+   * The question that follows "is this worth trading": how much. Bounded by the
+   * cost gate, the caller's risk budget, the venue's brackets, and whether the
+   * position survives long enough to see the move it is waiting for.
+   */
+  async positionSize(input: {
+    symbol: string
+    claimedEdgeBps: number
+    accountEquityUsd: number
+    riskBudgetPct?: number | undefined
+    safetyMultiple?: number | undefined
+  }) {
+    const market = await this.resolveSymbol(input.symbol)
+    const [risk, sample] = await Promise.all([this.client.riskConfig(), this.friction.sample(market.symbol)])
+
+    const marketRisk = risk.symbols[market.symbol]
+    if (!marketRisk) {
+      throw new PublicMcpError(
+        'not_found',
+        `The engine returned no risk configuration for ${market.symbol}, so size cannot be bounded for it.`,
+      )
+    }
+
+    const result = sizePosition({
+      risk: marketRisk,
+      claimedEdgeBps: input.claimedEdgeBps,
+      frictionBps: sample.quote.roundTripBps,
+      accountEquityUsd: input.accountEquityUsd,
+      ...(input.riskBudgetPct === undefined ? {} : { riskBudgetPct: input.riskBudgetPct }),
+      ...(input.safetyMultiple === undefined ? {} : { safetyMultiple: input.safetyMultiple }),
+    })
+
+    return envelope(
+      {
+        symbol: market.symbol,
+        ...result,
+        untrustedSignalNotice: UNTRUSTED_SIGNAL_NOTICE,
+        provenance: provenanceOf(sample),
+      },
+      [`${this.client.apiSource}/risk-config`],
+      [
+        ...result.warnings,
+        ...sample.limitations,
+        ...(sample.isLowerBound
+          ? ['Friction is a lower bound, so the buffer this size relies on is smaller in reality than modelled here.']
+          : []),
+      ],
+    )
+  }
+
+  /**
+   * What holding costs, on top of what entering costs. Friction is charged
+   * twice and then done; funding is charged for as long as the position exists,
+   * and over a day it can exceed the round trip this package gates on.
+   */
+  async fundingCost(input: {
+    symbol: string
+    side: 'long' | 'short'
+    notionalUsd: number
+    holdHours: number
+    intervalHours?: number | undefined
+  }) {
+    const market = await this.resolveSymbol(input.symbol)
+    const [marketData, sample] = await Promise.all([
+      this.client.marketData(),
+      this.friction.sample(market.symbol),
+    ])
+
+    const record = marketData.find((candidate) => normalise(candidate.symbol) === normalise(market.symbol))
+    if (!record) {
+      throw new PublicMcpError(
+        'not_found',
+        `The engine listed ${market.symbol} but published no funding record for it.`,
+      )
+    }
+
+    const carry = fundingCost({
+      record,
+      side: input.side,
+      notionalUsd: input.notionalUsd,
+      holdHours: input.holdHours,
+      ...(input.intervalHours === undefined ? {} : { intervalHours: input.intervalHours }),
+    })
+    const allIn = allInCostBps(carry, sample.quote.roundTripBps)
+
+    return envelope(
+      {
+        ...carry,
+        roundTripFrictionBps: sample.quote.roundTripBps,
+        carryBps: allIn.carryBps,
+        allInCostBps: allIn.allInBps,
+        carryBasis: allIn.carryBasis,
+        carryExceedsRoundTrip: Math.abs(allIn.carryBps) > sample.quote.roundTripBps,
+        provenance: provenanceOf(sample),
+      },
+      [`${this.client.apiSource}/market-data`, `${this.client.apiSource}/risk-config`],
+      [
+        ...carry.notes,
+        ...sample.limitations,
+        ...(allIn.carryBasis === 'worst-candidate'
+          ? [
+              'All-in cost uses the most expensive funding interval, which is the conservative reading while the interval is unconfirmed.',
+            ]
+          : []),
+        ...(allIn.carryBps > sample.quote.roundTripBps
+          ? [
+              'Carry over this hold exceeds the round-trip friction. For a hold this long, entry cost is the smaller half of what the trade must beat.',
+            ]
           : []),
       ],
     )

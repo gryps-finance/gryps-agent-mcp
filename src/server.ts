@@ -336,5 +336,127 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     (input) => safely(() => service.measuredFees(input)),
   )
 
+  server.registerTool(
+    'gryps_margin_profile',
+    {
+      title: 'Find where the position gets liquidated',
+      description:
+        'Turn the venue published maintenance-margin ladder into the numbers a trade actually needs: which bracket a given size falls into, the initial and maintenance margin it requires, the maximum leverage available at that size, and how far the price can move against the position before it is liquidated, in basis points and in dollars. Supply a claimed edge to also check whether the position can survive long enough for that move to arrive. Arithmetic on published parameters, not a promise from the liquidation engine.',
+      inputSchema: {
+        symbol: z.string().trim().min(1).max(40),
+        notionalUsd: z
+          .number()
+          .positive()
+          .max(1_000_000_000)
+          .describe('Position size in USD. Bracket, maintenance rate, and leverage ceiling all depend on it.'),
+        side: z.enum(['long', 'short']).default('long'),
+        leverage: z
+          .number()
+          .positive()
+          .max(200)
+          .optional()
+          .describe('Leverage to price. Defaults to the market default, and is clamped to the ceiling for this size.'),
+        claimedEdgeBps: z
+          .number()
+          .finite()
+          .min(-10_000)
+          .max(100_000)
+          .optional()
+          .describe('The move being waited for. Supply it to check the position survives long enough to see it.'),
+      },
+      annotations,
+    },
+    ({ symbol, notionalUsd, side, leverage, claimedEdgeBps }) =>
+      safely(() =>
+        service.marginProfile({
+          symbol,
+          notionalUsd,
+          side,
+          ...(leverage === undefined ? {} : { leverage }),
+          ...(claimedEdgeBps === undefined ? {} : { claimedEdgeBps }),
+        }),
+      ),
+  )
+
+  server.registerTool(
+    'gryps_position_size',
+    {
+      title: 'Size a position against cost, margin, and liquidation',
+      description:
+        'Answer how large a position can be, given what the trade costs, how much of the account the caller will commit, the venue margin brackets, and whether the position survives long enough for the expected move to arrive. Returns the largest size satisfying every constraint and names the one that binds. A calculator over supplied constraints, not a recommendation, and it sizes a claim without checking whether the claim is true.',
+      inputSchema: {
+        symbol: z.string().trim().min(1).max(40),
+        claimedEdgeBps: z
+          .number()
+          .finite()
+          .min(-10_000)
+          .max(100_000)
+          .describe('The move being waited for, in basis points.'),
+        accountEquityUsd: z.number().positive().max(1_000_000_000).describe('Total account equity in USD.'),
+        riskBudgetPct: z
+          .number()
+          .positive()
+          .max(100)
+          .optional()
+          .describe('Share of equity to commit as margin. Default 1 percent.'),
+        safetyMultiple: z
+          .number()
+          .min(0)
+          .max(20)
+          .optional()
+          .describe(
+            'How many times the claimed edge the position must absorb against it before liquidation. Default 2.',
+          ),
+      },
+      annotations,
+    },
+    ({ symbol, claimedEdgeBps, accountEquityUsd, riskBudgetPct, safetyMultiple }) =>
+      safely(() =>
+        service.positionSize({
+          symbol,
+          claimedEdgeBps,
+          accountEquityUsd,
+          ...(riskBudgetPct === undefined ? {} : { riskBudgetPct }),
+          ...(safetyMultiple === undefined ? {} : { safetyMultiple }),
+        }),
+      ),
+  )
+
+  server.registerTool(
+    'gryps_funding_cost',
+    {
+      title: 'Price the cost of holding, not just entering',
+      description:
+        'Report the live funding rate for one market and what it costs to hold a position across a given duration, alongside round-trip friction, so a trade can be gated on its all-in cost rather than its entry cost. Funding is a transfer between traders, so one side pays what the other receives. The engine publishes the rate but not the interval it is charged over, so the hold cost is reported across the intervals venues actually use until the interval is confirmed.',
+      inputSchema: {
+        symbol: z.string().trim().min(1).max(40),
+        side: z.enum(['long', 'short']).default('long'),
+        notionalUsd: z.number().positive().max(1_000_000_000).describe('Position size in USD.'),
+        holdHours: z
+          .number()
+          .min(0)
+          .max(8_760)
+          .describe('How long the position is expected to be held, in hours.'),
+        intervalHours: z
+          .number()
+          .positive()
+          .max(24)
+          .optional()
+          .describe('Funding interval, once the venue confirms it. Left unset, every plausible interval is reported.'),
+      },
+      annotations,
+    },
+    ({ symbol, side, notionalUsd, holdHours, intervalHours }) =>
+      safely(() =>
+        service.fundingCost({
+          symbol,
+          side,
+          notionalUsd,
+          holdHours,
+          ...(intervalHours === undefined ? {} : { intervalHours }),
+        }),
+      ),
+  )
+
   return server
 }

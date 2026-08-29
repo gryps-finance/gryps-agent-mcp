@@ -332,3 +332,75 @@ test('browsing something genuinely absent says so rather than guessing', async (
   assert.equal(response.data.query?.matchMode, 'none')
   assert.match(response.meta.limitations.join(' '), /probably not listed/)
 })
+
+test('margin profile turns the published ladder into a liquidation distance', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.marginProfile({
+    symbol: 'BTC',
+    notionalUsd: 1_000,
+    side: 'long',
+    leverage: 20,
+    claimedEdgeBps: 50,
+  })
+  assert.equal(response.data.symbol, 'BTCUSDT')
+  assert.equal(response.data.liquidationDistanceBps, 400)
+  assert.equal(response.data.survival?.edgeReachable, true)
+  assert.equal(response.data.priceStatus, 'available')
+  assert.match(response.meta.limitations.join(' '), /not from the engine liquidation engine/)
+})
+
+test('margin profile flags a position too fragile to reach its own edge', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.marginProfile({
+    symbol: 'BTC',
+    notionalUsd: 1_000,
+    side: 'long',
+    leverage: 75,
+    claimedEdgeBps: 50,
+  })
+  assert.equal(response.data.survival?.edgeReachable, false)
+  assert.match(response.meta.limitations.join(' '), /it is the position size and leverage that make it fragile/)
+})
+
+test('position size refuses a claim that does not clear live friction', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.positionSize({ symbol: 'BTC', claimedEdgeBps: 15, accountEquityUsd: 100_000 })
+  assert.equal(response.data.viable, false)
+  assert.equal(response.data.bindingConstraint, 'edge-does-not-clear-friction')
+  assert.match(response.data.untrustedSignalNotice, /UNTRUSTED SIGNAL NOTICE/)
+})
+
+test('funding cost prices the hold beside the round trip', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.fundingCost({
+    symbol: 'BTC',
+    side: 'long',
+    notionalUsd: 100_000,
+    holdHours: 168,
+  })
+  assert.equal(response.data.roundTripFrictionBps, 24)
+  assert.equal(response.data.carryBasis, 'worst-candidate')
+  assert.equal(response.data.carryExceedsRoundTrip, true)
+  assert.match(response.meta.limitations.join(' '), /entry cost is the smaller half/)
+})
+
+test('funding cost reports a market the engine lists but publishes no funding for', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({
+      config: testConfig,
+      fetcher: fixtureFetch({ '/api/v1/market-data': { markets: [] } }),
+    }),
+  )
+  await assert.rejects(
+    () => service.fundingCost({ symbol: 'BTC', side: 'long', notionalUsd: 1_000, holdHours: 8 }),
+    (error: unknown) => error instanceof PublicMcpError && error.code === 'not_found',
+  )
+})
