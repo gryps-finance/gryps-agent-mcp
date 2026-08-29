@@ -10,16 +10,45 @@
  * The engine publishes the rate but not the interval it is charged over, which
  * is the same shape of gap as the fee-direction question. It is handled the
  * same way: the exact per-event cost is reported with no assumption, and the
- * hold cost is reported across the plausible intervals until the interval is
- * confirmed. One observation cannot settle it, because a timestamp on an
- * eight-hour grid also sits on the four-hour and one-hour grids.
+ * hold cost is reported across the intervals still consistent with what was
+ * observed.
+ *
+ * Those candidates are derived, not guessed. A funding stamp rules an interval
+ * out in two ways: the stamp must sit on that interval's grid, and the previous
+ * stamp on that grid must already have passed, or the engine would be
+ * advertising it instead. That narrows the set on every call without assuming a
+ * convention.
+ *
+ * The interval is per market. Measured on 2026-08-29, COTIUSDT and ONGUSDT
+ * rolled 22:00 to 23:00 UTC, one hour apart, while 699 other markets stamped at
+ * 00:00 and did not roll at 22:00 at all. Any single venue-wide assumption
+ * would have been wrong for one cohort or the other.
  */
 
 import { PublicMcpError } from './errors.js'
 import type { MarketDataRecord } from './schemas.js'
 
-/** Intervals in hours that perpetual venues actually use. */
-export const CANDIDATE_FUNDING_INTERVALS_HOURS = [1, 4, 8] as const
+/** Intervals that divide a day evenly, which is what funding grids are built on. */
+export const CANDIDATE_FUNDING_INTERVALS_HOURS = [1, 2, 3, 4, 6, 8, 12, 24] as const
+
+const HOUR_MS = 3_600_000
+
+/**
+ * Intervals still consistent with one observed funding stamp.
+ *
+ * An interval survives only if the advertised stamp sits on its grid and the
+ * previous stamp on that grid has already gone by. A market advertising 23:00
+ * at 22:02 can only be hourly; one advertising 00:00 at 22:02 cannot be hourly,
+ * because 23:00 would have been advertised instead.
+ */
+export function consistentIntervalsHours(nextFundingTimeMs: number, observedAtMs: number): number[] {
+  return CANDIDATE_FUNDING_INTERVALS_HOURS.filter((hours) => {
+    const period = hours * HOUR_MS
+    // Grids are anchored at the UTC epoch, which is also UTC midnight.
+    if (nextFundingTimeMs % period !== 0) return false
+    return nextFundingTimeMs - period <= observedAtMs
+  })
+}
 
 export interface FundingEventCost {
   intervalHours: number
@@ -29,6 +58,8 @@ export interface FundingEventCost {
 }
 
 export interface FundingCost {
+  /** Intervals not ruled out by the observed stamp. */
+  candidateIntervalsHours: number[]
   symbol: string
   side: 'long' | 'short'
   notionalUsd: number
@@ -80,7 +111,9 @@ export function fundingCost(input: FundingInput): FundingCost {
   const costPerEventBps = side === 'long' ? ratePerEventBps : -ratePerEventBps
   const costPerEventUsd = (notionalUsd * costPerEventBps) / 10_000
 
-  const byInterval = CANDIDATE_FUNDING_INTERVALS_HOURS.map((intervalHours) => {
+  const candidateIntervalsHours = consistentIntervalsHours(record.nextFundingTime, record.updatedAt)
+  const intervals = input.intervalHours !== undefined ? [input.intervalHours] : candidateIntervalsHours
+  const byInterval = intervals.map((intervalHours) => {
     // A position is charged at each funding stamp it is open across.
     const events = Math.ceil(holdHours / intervalHours)
     return {
@@ -100,13 +133,21 @@ export function fundingCost(input: FundingInput): FundingCost {
   ]
   if (intervalResolved) {
     notes.push(`Funding interval of ${intervalHoursUsed} hours was supplied by configuration, not read from the engine.`)
+  } else if (candidateIntervalsHours.length === 1) {
+    notes.push(
+      `The advertised funding stamp is consistent with only one interval, ${candidateIntervalsHours[0]} hours, so the hold cost above is determined rather than bracketed.`,
+    )
   } else {
     notes.push(
-      'The engine publishes the funding rate but not the interval it is charged over, so the hold cost is reported across the intervals venues actually use. One timestamp cannot settle this: a stamp on an eight-hour grid also sits on the four-hour and one-hour grids. Confirm the interval with the venue before treating any single row as the cost.',
+      `The engine publishes the funding rate but not the interval it is charged over. The advertised stamp rules out every interval except ${candidateIntervalsHours.join(', ')} hours, and the hold cost is reported across those. Confirm the interval with the venue before treating any single row as the cost.`,
     )
   }
+  notes.push(
+    'Funding intervals differ between markets on this venue. Measured on 2026-08-29, two markets funded hourly while 699 others did not stamp on the hour at all, so an interval confirmed for one market must not be assumed for another.',
+  )
 
   return {
+    candidateIntervalsHours,
     symbol: record.symbol,
     side,
     notionalUsd,
@@ -128,8 +169,9 @@ export function fundingCost(input: FundingInput): FundingCost {
 /**
  * Carry added to round-trip friction, so a hold can be gated on its all-in
  * cost rather than its entry cost. Without a confirmed interval this returns
- * the most expensive candidate, which is the conservative reading and matches
- * how this package already treats the unresolved fee direction.
+ * the most expensive candidate still consistent with the observed stamp, which
+ * is the conservative reading and matches how this package already treats the
+ * unresolved fee direction.
  */
 export function allInCostBps(
   friction: FundingCost,
@@ -140,6 +182,10 @@ export function allInCostBps(
     const carryBps = friction.costPerEventBps * events
     return { carryBps, allInBps: roundTripFrictionBps + carryBps, carryBasis: 'confirmed-interval' }
   }
-  const carryBps = Math.max(...friction.byInterval.map((row) => row.costBps))
+  const costs = friction.byInterval.map((row) => row.costBps)
+  if (costs.length === 0) {
+    return { carryBps: 0, allInBps: roundTripFrictionBps, carryBasis: 'worst-candidate' }
+  }
+  const carryBps = Math.max(...costs)
   return { carryBps, allInBps: roundTripFrictionBps + carryBps, carryBasis: 'worst-candidate' }
 }

@@ -2,6 +2,26 @@
 
 ## 0.2.0-alpha.3 (unreleased)
 
+- `gryps_funding_cost` now derives the candidate funding intervals instead of
+  assuming a convention. The first cut listed one, four and eight hours because
+  those are what venues usually use, which was a guess of exactly the kind this
+  package exists to refuse. An advertised funding stamp is evidence: an interval
+  survives only if the stamp sits on its grid and the previous stamp on that grid
+  has already passed, since otherwise the engine would be advertising that one.
+  A market showing 23:00 at 22:02 can only be hourly; one showing 00:00 at the
+  same moment cannot be.
+- Funding intervals differ between markets here, so no single venue-wide answer
+  was ever going to be right. Measured on 2026-08-29 across the boundary,
+  COTIUSDT and ONGUSDT rolled 22:00 to 23:00 one hour apart, while 699 other
+  markets advertised 00:00 and did not stamp at 22:00 at all. The derivation
+  reproduces that split from a single read: COTIUSDT resolves to hourly outright,
+  BTCUSDT to everything except hourly. Every response says which market it
+  measured and warns against carrying the answer to another.
+- The correction matters for the number. Under the guessed set a day of BTC
+  carry was reported at up to 24 bps; derived from the stamp it is 9.6 bps, and
+  COTIUSDT at minus 21.8 bps an hour pays a long roughly 523 bps a day, which no
+  hardcoded eight-hour assumption would have shown.
+
 - Added `gryps_margin_profile`. Every `risk-config` read already returned a full
   maintenance-margin ladder per symbol, which this package validated and threw
   away. It now decodes the brackets and reports which one a size falls into, the

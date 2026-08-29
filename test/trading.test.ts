@@ -3,7 +3,7 @@ import test from 'node:test'
 import { PublicMcpError } from '../src/errors.js'
 import { bracketFor, checkSurvival, decodeBrackets, marginProfile } from '../src/margin.js'
 import { sizePosition } from '../src/sizing.js'
-import { allInCostBps, fundingCost } from '../src/funding.js'
+import { allInCostBps, consistentIntervalsHours, fundingCost } from '../src/funding.js'
 import type { MarketDataRecord, SymbolRisk } from '../src/schemas.js'
 
 // A two-bracket ladder in the engine's own 1e6 fixed point: 5k notional at
@@ -138,18 +138,24 @@ test('funding is a transfer: one side pays exactly what the other receives', () 
   assert.equal(long.costPerEventUsd, 10)
 })
 
-test('reports the hold cost across every plausible interval while the interval is unknown', () => {
+test('reports the hold cost across every interval the stamp leaves standing', () => {
   const cost = fundingCost({ record: funding, side: 'long', notionalUsd: 100_000, holdHours: 24 })
   assert.equal(cost.intervalResolved, false)
+  // Advertising 00:00 while observed at 22:37 rules out hourly and nothing else.
+  assert.deepEqual(cost.candidateIntervalsHours, [2, 3, 4, 6, 8, 12, 24])
   assert.deepEqual(
     cost.byInterval.map((row) => [row.intervalHours, row.events, row.costBps]),
     [
-      [1, 24, 24],
+      [2, 12, 12],
+      [3, 8, 8],
       [4, 6, 6],
+      [6, 4, 4],
       [8, 3, 3],
+      [12, 2, 2],
+      [24, 1, 1],
     ],
   )
-  assert.match(cost.notes.join(' '), /also sits on the four-hour and one-hour grids/)
+  assert.match(cost.notes.join(' '), /rules out every interval except/)
 })
 
 test('uses a confirmed interval when one is supplied', () => {
@@ -171,21 +177,70 @@ test('an unconfirmed interval takes the most expensive candidate', () => {
   const cost = fundingCost({ record: funding, side: 'long', notionalUsd: 100_000, holdHours: 24 })
   const allIn = allInCostBps(cost, 24)
   assert.equal(allIn.carryBasis, 'worst-candidate')
-  assert.equal(allIn.carryBps, 24)
-  assert.equal(allIn.allInBps, 48)
+  // Two-hourly is the most expensive interval still standing: twelve charges.
+  assert.equal(allIn.carryBps, 12)
+  assert.equal(allIn.allInBps, 36)
 })
 
 test('the conservative reading for a receiving side is the least it receives', () => {
   const cost = fundingCost({ record: funding, side: 'short', notionalUsd: 100_000, holdHours: 24 })
   const allIn = allInCostBps(cost, 24)
-  // Worst case for a short earning funding is earning as little as possible.
-  assert.equal(allIn.carryBps, -3)
-  assert.equal(allIn.allInBps, 21)
+  // Worst case for a short earning funding is earning as little as possible,
+  // which is the daily interval charging once.
+  assert.equal(allIn.carryBps, -1)
+  assert.equal(allIn.allInBps, 23)
 })
 
 test('carry over a long hold can dwarf the round trip being gated on', () => {
   const week = fundingCost({ record: funding, side: 'long', notionalUsd: 100_000, holdHours: 168 })
   const allIn = allInCostBps(week, 24)
-  assert.equal(allIn.carryBps, 168)
-  assert.ok(allIn.carryBps > 24 * 5)
+  // Eighty-four charges at two-hourly, against a 24 bps round trip.
+  assert.equal(allIn.carryBps, 84)
+  assert.ok(allIn.carryBps > 24 * 3)
+})
+
+/* ------------------------- funding interval derivation ------------------------- */
+
+test('derives the funding interval from the advertised stamp, ruling the rest out', () => {
+  // Measured 2026-08-29: COTIUSDT advertised 23:00 while observed at 22:02.
+  // Only an hourly grid can advertise 23:00 at that moment.
+  const hourly = consistentIntervalsHours(Date.parse('2026-08-29T23:00:00Z'), Date.parse('2026-08-29T22:02:13Z'))
+  assert.deepEqual(hourly, [1])
+
+  // BTCUSDT advertised 00:00 at the same moment, so it cannot be hourly: an
+  // hourly market would have been advertising 23:00 instead.
+  const daily = consistentIntervalsHours(Date.parse('2026-08-30T00:00:00Z'), Date.parse('2026-08-29T22:02:13Z'))
+  assert.ok(!daily.includes(1))
+  assert.ok(daily.includes(24))
+  assert.ok(daily.includes(4))
+})
+
+test('an observation just before a boundary narrows the candidates further', () => {
+  const stamp = Date.parse('2026-08-30T00:00:00Z')
+  const early = consistentIntervalsHours(stamp, Date.parse('2026-08-29T21:54:00Z'))
+  const late = consistentIntervalsHours(stamp, Date.parse('2026-08-29T22:02:00Z'))
+  // At 21:54 a two-hourly market would advertise 22:00, so two hours is out.
+  assert.ok(!early.includes(2))
+  assert.ok(late.includes(2))
+})
+
+test('a stamp off a grid excludes that interval entirely', () => {
+  // 23:00 is not on the four, eight, twelve or twenty-four hour grids.
+  const derived = consistentIntervalsHours(Date.parse('2026-08-29T23:00:00Z'), Date.parse('2026-08-29T22:30:00Z'))
+  for (const excluded of [4, 8, 12, 24]) assert.ok(!derived.includes(excluded))
+})
+
+test('funding cost reports only the intervals the stamp leaves standing', () => {
+  const hourlyRecord: MarketDataRecord = {
+    symbol: 'COTIUSDT',
+    fundingRate: '-0.00253404',
+    nextFundingTime: Date.parse('2026-08-29T23:00:00Z'),
+    updatedAt: Date.parse('2026-08-29T22:02:13Z'),
+  }
+  const cost = fundingCost({ record: hourlyRecord, side: 'short', notionalUsd: 10_000, holdHours: 6 })
+  assert.deepEqual(cost.candidateIntervalsHours, [1])
+  assert.equal(cost.byInterval.length, 1)
+  assert.equal(cost.byInterval[0]?.events, 6)
+  assert.match(cost.notes.join(' '), /determined rather than bracketed/)
+  assert.match(cost.notes.join(' '), /differ between markets/)
 })

@@ -427,7 +427,7 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     {
       title: 'Price the cost of holding, not just entering',
       description:
-        'Report the live funding rate for one market and what it costs to hold a position across a given duration, alongside round-trip friction, so a trade can be gated on its all-in cost rather than its entry cost. Funding is a transfer between traders, so one side pays what the other receives. The engine publishes the rate but not the interval it is charged over, so the hold cost is reported across the intervals venues actually use until the interval is confirmed.',
+        'Report the live funding rate for one market and what it costs to hold a position across a given duration, alongside round-trip friction, so a trade can be gated on its all-in cost rather than its entry cost. Funding is a transfer between traders, so one side pays what the other receives. The engine publishes the rate but not the interval it is charged over, so the candidate intervals are derived from the advertised funding stamp — an interval survives only if the stamp sits on its grid and the previous stamp has already passed — and the hold cost is reported across whatever survives. Intervals differ between markets on this venue, so one confirmed for one market must not be assumed for another.',
       inputSchema: {
         symbol: z.string().trim().min(1).max(40),
         side: z.enum(['long', 'short']).default('long'),

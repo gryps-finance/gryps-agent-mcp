@@ -57,10 +57,15 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
       enough to reach the move it is waiting for.
 - [x] Position sizing bounded by cost, risk budget, venue brackets, and
       survivability (`gryps_position_size`), naming the binding constraint.
-- [ ] Confirm the funding interval with the venue. The rate is published; the
-      period it is charged over is not, and one observation cannot infer it
-      because an eight-hour grid contains the four-hour and one-hour grids.
-      Until then carry is an interval, exactly like fee direction was.
+- [x] Derive candidate funding intervals from the advertised stamp rather than
+      assuming a convention, and report them per market. Confirmed empirically
+      across the 2026-08-29 22:00 UTC boundary: two markets fund hourly, 699 do
+      not stamp on the hour at all.
+- [ ] Close the remaining funding-interval ambiguity for the daily cohort. One
+      observation taken just after a stamp settles it outright: if a market
+      advertising 00:00 rolls to 04:00 it is four-hourly, to 08:00 eight-hourly,
+      to the next midnight daily. Worth folding into the nightly contract check
+      rather than asking anyone.
 - [ ] Treat oracle-versus-reference divergence as a tradable signal rather than
       only a sanity check. `gryps_reference_price` already computes it.
 - [ ] Structured stderr logging with `--log-level` (never stdout; stdio transport owns stdout).
