@@ -1,21 +1,6 @@
 # Changelog
 
-## Unreleased
-
-- Added `gryps_paper_session`: rehearse trades against live oracle prices with
-  zero capital. Open, close, status, and reset actions; entries and exits mark
-  at the oracle mid with real per-leg friction charged, and every close
-  decomposes the result into price move versus friction paid, with a narration
-  that names the venue lesson when friction eats a favourable move. Unrealized
-  status figures already charge the pending close, so a flat price shows as a
-  small loss, which is the honest number. Positions are bookkeeping in the
-  server process only: no order exists anywhere, and state dies with the
-  process. Bounded at 20 open positions and 200 retained closes. Test suite
-  grew from 84 to 95.
-- Added the `invalid_request` error code for malformed tool arguments that are
-  not configuration errors.
-
-## Unreleased (0.2.0-alpha.3)
+## 0.2.0-alpha.3 (unreleased)
 
 - Added `gryps_next_step`: journey-aware onboarding. On a fresh install it
   returns one starting point rather than a catalogue, then routes from there.
@@ -33,23 +18,20 @@
 - README and CONNECT.md now lead with the published npm install rather than the
   GitHub fallback, and the honesty-rule count is corrected to four.
 
-## Unreleased (0.2.0-alpha.2)
+- Added `gryps_paper_session`: rehearse trades against live oracle prices with
+  zero capital. Open, close, status, and reset actions; entries and exits mark
+  at the oracle mid with real per-leg friction charged, and every close
+  decomposes the result into price move versus friction paid, with a narration
+  that names the venue lesson when friction eats a favourable move. Unrealized
+  status figures already charge the pending close, so a flat price shows as a
+  small loss, which is the honest number. Positions are bookkeeping in the
+  server process only: no order exists anywhere, and state dies with the
+  process. Bounded at 20 open positions and 200 retained closes. Test suite
+  grew from 84 to 95.
+- Added the `invalid_request` error code for malformed tool arguments that are
+  not configuration errors.
 
-- Added `gryps_indicative_quote`: an indicative execution estimate for one clip,
-  built from the live oracle price plus measured friction. The engine exposes no
-  quote surface, so the response carries `firm: false`, `quoteStatus: derived`,
-  and `engineQuoteSurface: absent`. It is a cost model, never a tradable quote.
-- Added `gryps_reference_price`: the Gryps oracle beside a fair-value mid from a
-  public reference venue, with divergence in basis points. Anchors oracle sanity
-  checks and future paper-session pricing.
-- Live smoke now exercises all ten tools, asserting that a derived estimate can
-  never report itself as firm.
-- Published unscoped as `gryps-agent-mcp`. The `@gryps.finance` scope was
-  dropped because its dot breaks unquoted npx commands on Windows PowerShell.
-- Provenance moved from publishConfig to an explicit workflow flag so the first
-  publish can be done locally.
-
-## Unreleased
+## 0.2.0-alpha.2
 
 - Added `gryps_indicative_quote`: an indicative, non-firm execution estimate
   for one clip (oracle mid, estimated entry price, base quantity, all-in cost
@@ -68,7 +50,21 @@
   disabled, market not listed, and venue unreachable are all real outcomes
   with the oracle side still served. Test suite grew from 54 to 58.
 
-## Unreleased (0.2.0-alpha.1)
+- Added `gryps_indicative_quote`: an indicative execution estimate for one clip,
+  built from the live oracle price plus measured friction. The engine exposes no
+  quote surface, so the response carries `firm: false`, `quoteStatus: derived`,
+  and `engineQuoteSurface: absent`. It is a cost model, never a tradable quote.
+- Added `gryps_reference_price`: the Gryps oracle beside a fair-value mid from a
+  public reference venue, with divergence in basis points. Anchors oracle sanity
+  checks and future paper-session pricing.
+- Live smoke now exercises all ten tools, asserting that a derived estimate can
+  never report itself as firm.
+- Published unscoped as `gryps-agent-mcp`. The `@gryps.finance` scope was
+  dropped because its dot breaks unquoted npx commands on Windows PowerShell.
+- Provenance moved from publishConfig to an explicit workflow flag so the first
+  publish can be done locally.
+
+## 0.2.0-alpha.1
 
 Consolidates the decision layer from `@gryps/agent-core` into the public
 read-only package, turning it from a venue-data reader into a cost gate.

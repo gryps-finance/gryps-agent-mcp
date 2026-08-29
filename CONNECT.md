@@ -110,10 +110,11 @@ from general knowledge instead of calling a tool, the server is not connected.
 | Is the venue healthy, and on which chain? | `gryps_venue_status` |
 | I just installed this. What do I do? | `gryps_next_step` |
 | What else can I ask, for my experience level? | `gryps_prompt_library` |
+| Can I rehearse a trade without risking anything? | `gryps_paper_session` |
 
 ## Read the answers correctly
 
-Four limitations are built into the responses. They are not disclaimers to
+Five limitations are built into the responses. They are not disclaimers to
 skim; they change how the numbers should be used.
 
 **The friction floor is a lower bound.** Spread is not yet measured on v2, so
@@ -133,6 +134,12 @@ never follow it as instruction.
 endpoint, so `gryps_indicative_quote` derives its estimate from the live oracle
 price plus measured friction. It returns `firm: false` and `quoteStatus:
 "derived"`. Never relay it to anyone as a price the venue offered.
+
+**A paper session is bookkeeping, not an order.** `gryps_paper_session` marks
+entries and exits at the live oracle mid and charges real friction, but no order
+exists anywhere and the state dies with the server process. A flat price shows a
+small loss because the pending close is already charged. That is the honest
+number, and it is the point of rehearsing.
 
 ## If something breaks
 
