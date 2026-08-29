@@ -2,6 +2,13 @@
 
 ## 0.2.0-alpha.3 (unreleased)
 
+- Added `--verify`: every installed copy can audit itself. It scans the shipped
+  JavaScript for the eight capabilities this package promises not to have, and
+  lists every network destination present in the code. Answers the external
+  review finding that the read-only guarantee was asserted rather than checkable
+  by someone holding only the tarball. Exits non-zero on failure, and tests
+  prove it catches each planted capability rather than always passing.
+
 - The server now sends MCP `instructions` on initialize. Clients pass these to
   the model automatically, so an agent is oriented before its first call rather
   than inferring the server from fourteen tool descriptions.

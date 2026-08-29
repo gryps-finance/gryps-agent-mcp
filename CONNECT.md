@@ -40,6 +40,17 @@ If this fails, stop here and fix it before touching client config. A broken
 command is much easier to diagnose on its own than inside a client that only
 reports "server failed to start".
 
+## Step 1b: check the boundary for yourself (optional)
+
+```bash
+npx -y gryps-agent-mcp@alpha --verify
+```
+
+This audits the copy on your machine for signing, key handling, order
+placement, withdrawals, listeners, and subprocesses, and lists every network
+destination in the shipped code. You do not have to take the read-only claim
+on trust.
+
 ## Step 2: add it to your client
 
 ### Claude Desktop

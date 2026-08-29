@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { parseConfig } from './config.js'
 import { PACKAGE_NAME, PACKAGE_VERSION } from './constants.js'
 import { errorEnvelope } from './errors.js'
+import { formatSelfCheck, runSelfCheck } from './selfcheck.js'
 import { createPublicServer } from './server.js'
 
 const args = process.argv.slice(2)
@@ -11,6 +12,14 @@ const args = process.argv.slice(2)
 if (args.includes('--version') || args.includes('-v')) {
   process.stdout.write(`${PACKAGE_NAME} ${PACKAGE_VERSION}\n`)
   process.exit(0)
+}
+
+if (args.includes('--verify')) {
+  const result = runSelfCheck()
+  process.stdout.write(
+    args.includes('--json') ? `${JSON.stringify(result, null, 2)}\n` : formatSelfCheck(result),
+  )
+  process.exit(result.passed ? 0 : 1)
 }
 
 if (args.includes('--help') || args.includes('-h')) {
@@ -26,6 +35,8 @@ if (args.includes('--help') || args.includes('-h')) {
       '  --health-url=<url>    HTTPS health endpoint',
       '  --timeout-ms=<int>    Upstream request timeout, 1-60000 (default: 10000)',
       '  --cache-ttl-ms=<int>  Read cache TTL, 1-60000 (default: 10000)',
+      '  --verify              Audit this installed copy against its read-only claim',
+      '  --verify --json       The same audit as machine-readable JSON',
       '  --version, -v         Print the package version and exit',
       '  --help, -h            Print this help and exit',
       '',

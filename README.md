@@ -133,6 +133,28 @@ An agent must not present it to a user as a price the venue offered.
   suggestions. Neither ever resolves a market on your behalf by similarity.
 - It will not trade, sign, hold assets, or read your account.
 
+## Verify the boundary yourself
+
+The read-only claim is only worth what a stranger can check. Every installed
+copy audits itself:
+
+```bash
+npx -y gryps-agent-mcp@alpha --verify
+```
+
+It scans the JavaScript actually installed on your machine for the capabilities
+this package promises never to have: transaction signing, private keys, wallet
+clients, order placement, withdrawals, network listeners, environment
+configuration, and subprocesses. It also lists every network destination present
+in the shipped code, so you can see exactly where it is able to reach.
+
+Add `--json` for machine-readable output. A failed audit exits non-zero, so a
+pipeline can gate on it.
+
+A pass is evidence about that version, not a promise about future ones, which is
+why the check ships inside every version rather than living only in this
+repository.
+
 ## Configuration
 
 Configuration is explicit and never read from environment variables.
