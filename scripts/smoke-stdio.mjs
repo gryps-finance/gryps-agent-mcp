@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { PUBLIC_TOOL_NAMES } from '../dist/constants.js'
 
@@ -54,3 +54,27 @@ for (const tool of toolResponse.result.tools) {
   assert.equal(tool.annotations?.destructiveHint, false)
 }
 process.stdout.write(`MCP stdio smoke passed with ${names.length} public read tools.\n`)
+
+/**
+ * The self-audit runs against built output, so it is asserted here rather than
+ * in the unit suite, which runs before the build in the release chain.
+ */
+const verify = execFileSync(process.execPath, [
+  fileURLToPath(new URL('../dist/index.js', import.meta.url)),
+  '--verify',
+  '--json',
+], { encoding: 'utf8' })
+const audit = JSON.parse(verify)
+assert.equal(audit.passed, true, 'the shipped package must pass its own audit')
+assert.deepEqual(audit.toolsRegistered, [...PUBLIC_TOOL_NAMES])
+assert.deepEqual(
+  audit.networkDestinations,
+  ['https://api.hyperliquid.xyz', 'https://perps-api.orbs.network'],
+  'a new network destination in shipped code must be a deliberate decision',
+)
+for (const check of audit.checks) {
+  assert.equal(check.passed, true, `self-audit check failed: ${check.id}`)
+}
+process.stdout.write(
+  `Self-audit passed: ${audit.checks.length} capability checks, ${audit.networkDestinations.length} network destinations.\n`,
+)
