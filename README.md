@@ -66,10 +66,10 @@ versioned JSON envelope naming its live source, fetch time, and limitations.
 
 ## What an agent is told on connect
 
-The server sends MCP  on initialize, so any client passes them to
+The server sends MCP `instructions` on initialize, so any client passes them to
 the model as standing context without the user doing anything. They frame the
 server as a cost gate rather than an idea source, point a new install at
-, and name the four ways an agent could mislead someone with
+`gryps_next_step`, and name the four ways an agent could mislead someone with
 these tools.
 
 The seven journey prompts are also exposed as native MCP prompts, so clients
