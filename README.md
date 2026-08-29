@@ -54,6 +54,7 @@ Then ask your client:
 | `gryps_reference_price` | The live Gryps oracle price next to an external fair-value mid, with divergence in bps. The anchor for oracle sanity checks and paper-session pricing. |
 | `gryps_list_markets` | Browse the live v2 market catalogue with bounded search and pagination. Searches by common name (`bitcoin`, `matic`), and when nothing matches, names the nearest listed symbols as explicit guesses. |
 | `gryps_get_market` | Resolve one exact symbol, common name, or unique base asset and return live price and leverage limits. Reports which route resolved it. |
+| `gryps_measured_fees` | The median fee real fills actually paid, read from the settlement contract event log. A fill is a fact; a schedule is a claim. |
 | `gryps_get_fee_schedule` | The engine-reported fee tier ladder. |
 | `gryps_capabilities` | One call describing what the server answers, what it refuses, what it reads, and every known limitation with its consequence. |
 | `gryps_next_step` | Ask what to do next. On a fresh install it returns one starting point rather than a catalogue, then routes the journey from there. |

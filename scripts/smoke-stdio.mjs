@@ -69,7 +69,14 @@ assert.equal(audit.passed, true, 'the shipped package must pass its own audit')
 assert.deepEqual(audit.toolsRegistered, [...PUBLIC_TOOL_NAMES])
 assert.deepEqual(
   audit.networkDestinations,
-  ['https://api.hyperliquid.xyz', 'https://perps-api.orbs.network'],
+  [
+    // Order-book depth for cost comparison and the external reference mid.
+    'https://api.hyperliquid.xyz',
+    // The venue itself.
+    'https://perps-api.orbs.network',
+    // Settlement event log, for fees measured from fills rather than advertised.
+    'https://polygon.blockscout.com',
+  ],
   'a new network destination in shipped code must be a deliberate decision',
 )
 for (const check of audit.checks) {

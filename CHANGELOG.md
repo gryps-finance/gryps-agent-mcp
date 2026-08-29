@@ -2,6 +2,18 @@
 
 ## 0.2.0-alpha.3 (unreleased)
 
+- Added gryps_measured_fees: reads the settlement contract event log from a
+  public block explorer and reports the median fee real fills actually paid,
+  rather than what the schedule advertises. Keyless and read-only.
+- That measurement is one-way by construction, so it is also direct evidence on
+  whether the advertised rate covers one side or a round trip. Against live
+  chain data it currently supports the per-side reading, which is the
+  conservative assumption this package already makes. Reported as evidence with
+  its sample size and an explicit caution, not as a settled answer.
+- A third outbound host is now reachable. The smoke test asserts the exact
+  destination list, so this had to be recorded deliberately rather than drifting
+  in. SECURITY.md documents it and --explorer-url=off disables it.
+
 - Added `--verify`: every installed copy can audit itself. It scans the shipped
   JavaScript for the eight capabilities this package promises not to have, and
   lists every network destination present in the code. Answers the external

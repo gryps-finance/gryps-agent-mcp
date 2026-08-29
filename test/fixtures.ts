@@ -6,6 +6,7 @@ export const testConfig: PublicMcpConfig = {
   timeoutMs: 1_000,
   cacheTtlMs: 10_000,
   comparisonUrl: 'https://book.example.test/info',
+  explorerUrl: 'https://explorer.example.test/api/v2',
   comparisonTakerFeeBps: 4.5,
   feeIsRoundTrip: undefined,
   spreadBpsPerSide: undefined,

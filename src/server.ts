@@ -47,6 +47,7 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     comparisonTakerFeeBps: config.comparisonTakerFeeBps,
     feeIsRoundTrip: config.feeIsRoundTrip,
     spreadBpsPerSide: config.spreadBpsPerSide,
+    explorerUrl: config.explorerUrl,
     timeoutMs: config.timeoutMs,
     ...(options.fetcher ? { fetcher: options.fetcher } : {}),
   })
@@ -307,6 +308,33 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
       }),
     )
   }
+
+  server.registerTool(
+    'gryps_measured_fees',
+    {
+      title: 'Measure fees actually paid, from the chain',
+      description:
+        'Read the settlement contract event log from a public block explorer and report the median fee real fills actually paid, rather than what the fee schedule advertises. Because the measurement is one-way by construction, it is also direct evidence on whether the advertised rate covers one side or a round trip. Keyless and read-only.',
+      inputSchema: {
+        symbol: z
+          .string()
+          .trim()
+          .min(1)
+          .max(40)
+          .optional()
+          .describe('Narrow to one market. Falls back to a venue-wide median when that market has too few recent fills.'),
+        maxPages: z
+          .number()
+          .int()
+          .min(1)
+          .max(10)
+          .optional()
+          .describe('Explorer pages to scan. More pages mean a larger sample and a slower call.'),
+      },
+      annotations,
+    },
+    (input) => safely(() => service.measuredFees(input)),
+  )
 
   return server
 }

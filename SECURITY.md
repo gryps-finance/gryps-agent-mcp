@@ -6,15 +6,24 @@ This package is read-only by construction. It contains no wallet integration,
 signer, session key, order placement, cancellation, account mutation, private
 repository access, credential discovery, or trading strategy implementation.
 
-The server makes unauthenticated requests to exactly two kinds of destination:
+Run `npx gryps-agent-mcp --verify` to audit an installed copy against the
+claims below. It scans the shipped JavaScript for signing, key handling, order
+placement, withdrawals, listeners, environment configuration, and subprocesses,
+and lists every network destination present in the code.
+
+The server makes unauthenticated requests to exactly three kinds of destination:
 
 1. `GET` requests to the configured Gryps v2 read API and health endpoint.
 2. One `POST` request to the configured public order-book venue used by
    `gryps_route_compare`, carrying only a market symbol and no caller data.
    That request is a read: it retrieves a public order book and is keyless.
    Venue comparison can be disabled entirely with `--comparison-url=off`.
+3. `GET` requests to a public block explorer, used by `gryps_measured_fees` to
+   read the settlement contract's event log and measure fees actually paid.
+   Keyless, carries no caller data, and reads only public chain history.
+   Disable with `--explorer-url=off`.
 
-Both destinations are validated identically: HTTPS only except for loopback
+All destinations are validated identically: HTTPS only except for loopback
 development addresses, no credentials in the URL, query strings and fragments
 stripped, and redirects refused. Responses are schema-validated, size-capped,
 and never echoed raw.

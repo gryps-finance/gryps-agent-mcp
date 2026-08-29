@@ -38,6 +38,12 @@ export const DEFAULT_COMPARISON_URL = 'https://api.hyperliquid.xyz/info'
  */
 export const DEFAULT_COMPARISON_TAKER_FEE_BPS = 4.5
 
+/**
+ * Public block explorer used to measure fees actually paid on settled fills.
+ * Keyless and read-only. A third outbound host, so it is disable-able.
+ */
+export const DEFAULT_EXPLORER_URL = 'https://polygon.blockscout.com/api/v2'
+
 export const PUBLIC_TOOL_NAMES = [
   'gryps_list_markets',
   'gryps_get_market',
@@ -53,6 +59,7 @@ export const PUBLIC_TOOL_NAMES = [
   'gryps_prompt_library',
   'gryps_paper_session',
   'gryps_capabilities',
+  'gryps_measured_fees',
 ] as const
 
 export type PublicToolName = (typeof PUBLIC_TOOL_NAMES)[number]

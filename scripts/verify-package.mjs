@@ -33,10 +33,15 @@ for (const path of files) {
  * A ceiling on accidental inclusion, not a budget. The real boundary checks are
  * the path and content assertions above; this one exists to catch node_modules
  * or a stray build directory sneaking into the tarball. Raised from 300k when
- * the package grew from four tools to thirteen plus the prompt library; roughly
- * a third of the current size is source maps, which ship deliberately.
+ * the package grew from four tools to thirteen plus the prompt library, and
+ * from 400k when chain fee measurement and the self-audit landed. Roughly a
+ * third of the current size is source maps, which ship deliberately so a
+ * reader can trace shipped behaviour back to source. The download is a
+ * quarter of this figure.
+ *
+ * Raise it when real growth trips it; investigate when it jumps.
  */
-assert.ok(pack.unpackedSize < 400_000, `Package is unexpectedly large: ${pack.unpackedSize} bytes`)
+assert.ok(pack.unpackedSize < 500_000, `Package is unexpectedly large: ${pack.unpackedSize} bytes`)
 
 /**
  * Founders-internal readiness content must never ship. Publishing an assessment

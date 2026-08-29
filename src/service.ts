@@ -9,6 +9,7 @@ import {
   combineSignals,
   type StackedSignal,
 } from './analysis.js'
+import { ChainFeeSource, assessFeeDirection } from './chainfees.js'
 import { ComparisonVenue, compareRoutes, type VenueQuote } from './router.js'
 import {
   PaperBook,
@@ -175,6 +176,7 @@ export function resolveMarket(markets: MarketRecord[], requested: string): Marke
 
 export interface PublicReadServiceOptions {
   comparisonUrl?: string | null
+  explorerUrl?: string | null
   comparisonTakerFeeBps?: number
   feeIsRoundTrip?: boolean | undefined
   spreadBpsPerSide?: number | undefined
@@ -213,6 +215,7 @@ export interface PaperSessionResult {
 export class PublicReadService {
   private readonly friction: FrictionService
   private readonly comparison: ComparisonVenue | null
+  private readonly chainFees: ChainFeeSource | null
   private readonly paper = new PaperBook()
 
   constructor(
@@ -228,6 +231,13 @@ export class PublicReadService {
           apiUrl: options.comparisonUrl,
           takerFeeBpsPerLeg: options.comparisonTakerFeeBps ?? 0,
           timeoutMs: options.timeoutMs ?? 10_000,
+          ...(options.fetcher ? { fetcher: options.fetcher } : {}),
+        })
+      : null
+    this.chainFees = options.explorerUrl
+      ? new ChainFeeSource({
+          explorerUrl: options.explorerUrl,
+          timeoutMs: options.timeoutMs ?? 20_000,
           ...(options.fetcher ? { fetcher: options.fetcher } : {}),
         })
       : null
@@ -874,5 +884,39 @@ export class PublicReadService {
       'These are prompts for you to run. This server performs none of them.',
       'Prompts above the money line are withheld until the funding station is complete, or until requested deliberately by autonomy level.',
     ])
+  }
+
+  /**
+   * Fees as the chain recorded them, not as the schedule advertises them. The
+   * comparison against the advertised rate is the point: because the
+   * measurement is one-way, it discriminates between the two readings of a
+   * schedule that does not say which it is.
+   */
+  async measuredFees(input: { symbol?: string | undefined; maxPages?: number | undefined } = {}) {
+    if (!this.chainFees) {
+      throw new PublicMcpError(
+        'invalid_configuration',
+        'Chain fee measurement is disabled in this server configuration (--explorer-url=off).',
+      )
+    }
+    const canonicalSymbol = input.symbol ? (await this.resolveSymbol(input.symbol)).symbol : undefined
+    const [measured, risk] = await Promise.all([
+      this.chainFees.measure(canonicalSymbol),
+      this.client.riskConfig(),
+    ])
+    const tierZero = risk.feeTiers.find((tier) => tier.tierLevel === 0)
+    const finding = tierZero
+      ? assessFeeDirection(tierZero.totalFeeRateBps, measured.medianOneWayBps, measured.sampleSize)
+      : null
+
+    return envelope(
+      { measured, advertised: tierZero ?? null, feeDirectionEvidence: finding },
+      [`${this.client.apiSource}/risk-config`, 'public chain explorer'],
+      [
+        'Measured from settled events on chain. A fill is a fact; a schedule is a claim.',
+        `Median across ${measured.sampleSize} deduped fills, ${measured.scope}. Fee tiers differ by account, so this is not the rate any one account pays.`,
+        'Spread is still unmeasured, so this remains a fee measurement rather than all-in friction.',
+      ],
+    )
   }
 }

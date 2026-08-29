@@ -118,6 +118,7 @@ from general knowledge instead of calling a tool, the server is not connected.
 | What would a $100k BTC clip actually look like? | `gryps_indicative_quote` |
 | Is the Gryps price in line with the wider market? | `gryps_reference_price` |
 | Which markets exist, and what is BTC priced at? | `gryps_list_markets`, `gryps_get_market` |
+| What do fills actually pay, not what is advertised? | `gryps_measured_fees` |
 | Is the venue healthy, and on which chain? | `gryps_venue_status` |
 | What is this coin called here? | `gryps_list_markets` |
 | I just installed this. What do I do? | `gryps_next_step` |

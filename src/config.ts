@@ -3,6 +3,7 @@ import {
   DEFAULT_CACHE_TTL_MS,
   DEFAULT_COMPARISON_TAKER_FEE_BPS,
   DEFAULT_COMPARISON_URL,
+  DEFAULT_EXPLORER_URL,
   DEFAULT_HEALTH_URL,
   DEFAULT_TIMEOUT_MS,
 } from './constants.js'
@@ -21,6 +22,8 @@ export interface PublicMcpConfig {
    * false means confirmed per side. The distinction is reported to callers.
    */
   feeIsRoundTrip: boolean | undefined
+  /** Public explorer for chain-measured fees. Null disables that tool. */
+  explorerUrl: string | null
   /** Operator-measured spread per side, in bps. Absent means spread is unmeasured. */
   spreadBpsPerSide: number | undefined
 }
@@ -34,6 +37,7 @@ const KNOWN_ARGUMENTS = [
   'comparison-taker-fee-bps',
   'fee-is-round-trip',
   'spread-bps-per-side',
+  'explorer-url',
 ] as const
 
 function validateEndpoint(raw: string, label: string): string {
@@ -106,6 +110,10 @@ export function parseConfig(args: string[]): PublicMcpConfig {
   const comparisonUrl =
     rawComparison === 'off' ? null : validateEndpoint(rawComparison ?? DEFAULT_COMPARISON_URL, 'comparison-url')
 
+  const rawExplorer = parsed.get('explorer-url')
+  const explorerUrl =
+    rawExplorer === 'off' ? null : validateEndpoint(rawExplorer ?? DEFAULT_EXPLORER_URL, 'explorer-url')
+
   const rawSpread = parsed.get('spread-bps-per-side')
 
   return {
@@ -120,6 +128,7 @@ export function parseConfig(args: string[]): PublicMcpConfig {
       'comparison-taker-fee-bps',
     ),
     feeIsRoundTrip: booleanFlag(parsed.get('fee-is-round-trip'), 'fee-is-round-trip'),
+    explorerUrl,
     spreadBpsPerSide: rawSpread === undefined ? undefined : nonNegativeRate(rawSpread, 0, 'spread-bps-per-side'),
   }
 }
