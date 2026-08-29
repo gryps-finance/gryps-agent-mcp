@@ -12,7 +12,12 @@ private single-account observer profile that never ships in the npm tarball.
 - `internal-src/`, `internal-test/`, `internal-dist/` must stay out of the npm
   tarball (`npm run verify:package` proves it).
 - stdout belongs to the stdio MCP transport. Diagnostics go to stderr only.
-- Symbol resolution is exact-match only; substring guessing is refused by design.
+- Symbol resolution is exact-match only, after an exact-keyed rewrite through
+  the curated alias table in `src/symbols.ts`. An alias is a rename, not a
+  guess: it rewrites the query and never asserts a market exists. Substring
+  guessing stays refused. Edit-distance results are suggestions only — they
+  surface in `gryps_list_markets` and in `not_found` messages, labelled as
+  guesses, and never resolve a symbol.
 
 ## Layout
 

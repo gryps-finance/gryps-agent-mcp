@@ -2,6 +2,60 @@
 
 ## 0.2.0-alpha.3 (unreleased)
 
+- The server now sends MCP `instructions` on initialize. Clients pass these to
+  the model automatically, so an agent is oriented before its first call rather
+  than inferring the server from fourteen tool descriptions.
+- Added `gryps_capabilities`: what the server answers, what it refuses, which
+  live sources it reads, and every known limitation paired with its consequence.
+- Wrote the seven journey-spine prompt bodies. `gryps_next_step` previously
+  named a destination without supplying the route; it now returns the runnable
+  text, with `bodyStatus` marking any prompt whose body is not yet written.
+- Exposed those prompts through the native MCP prompts capability, so clients
+  surface the guided journey in their own interface.
+- A test now requires every journey prompt to carry an explicit refusal or
+  limit. It caught two of the seven on first run.
+
+- Fee direction is now reported as an interval instead of a footnote. The
+  engine never states whether `totalFeeRateBps` is per side or a round trip,
+  and the answer is worth a factor of two, so every friction sample carries both
+  readings. `gryps_friction_floor` gains `feeDirectionRange` with both round
+  trips and both break-even edges; `gryps_edge_check` re-runs the gate against
+  the alternative reading and reports `feeDirectionSensitivity.verdictStable`,
+  saying plainly that a call is not decidable from live data when the verdict
+  flips between them. `--fee-is-round-trip` became three-state: unset is
+  unresolved, and `false` now means confirmed per side rather than merely
+  assumed. `gryps_get_fee_schedule` reports the three states accordingly.
+- Spread absence is now evidence rather than an assurance. Every order-book,
+  depth, ticker, and quote path on the public v2 engine was probed and returns
+  404; the probe is pinned in `SPREAD_SURFACE_PROBE` and surfaces as
+  `spreadSurface` on every friction-derived response. Spread is absent
+  upstream, not unwired here, and cannot be measured from this package until the
+  engine ships a surface for it.
+- Settlement identity is verified rather than relayed. The canonical chain,
+  contract, and collateral token are pinned in this package and compared against
+  what the engine reports; `gryps_venue_status` returns
+  `verified | mismatch | unreported` with named mismatches and a loud
+  limitation when the endpoint does not describe canonical Gryps.
+- Symbol discovery no longer fails on the obvious input. A search for
+  `bitcoin` used to return nothing. A curated alias table, checked against the
+  live catalogue, rewrites common names to the ticker the venue actually lists
+  (`matic` finds `POLUSDT`, `shiba inu` finds `1000SHIBUSDT`), substring hits
+  are ranked exact-first, and a query that matches nothing returns the nearest
+  listed symbols labelled as guesses. The same suggestions now appear in
+  `not_found` messages. Aliases rewrite the query and never assert a market
+  exists; substring guessing stays refused and similarity never resolves.
+  `gryps_get_market` reports the route that resolved it.
+- `gryps_signal_stack` now detects echoed sources. Exact repeats of one source,
+  and anything sharing a declared `originId`, are folded into a single signal
+  keeping the largest claim. Near-identical source names are not folded but have
+  their pairwise correlation floored at 0.9, well above what source-family
+  priors alone would give. The naive sum still counts every supplied signal, so
+  the overstatement factor measures exactly the trap being warned about.
+- Raised the release gate's package-size ceiling from 300k to 400k. It is an
+  accidental-inclusion guard, not a budget, and the package has grown from four
+  tools to thirteen; the path and content boundary assertions are unchanged.
+- Test suite grew from 95 to 115.
+
 - Added `gryps_next_step`: journey-aware onboarding. On a fresh install it
   returns one starting point rather than a catalogue, then routes from there.
 - Added `gryps_prompt_library`: 25 staged prompts searchable by journey stage,

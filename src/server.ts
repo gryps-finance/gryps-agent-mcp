@@ -6,6 +6,8 @@ import { PUBLIC_TOOL_NAMES, SERVER_NAME, PACKAGE_VERSION } from './constants.js'
 import { errorEnvelope } from './errors.js'
 import { SIGNAL_FAMILIES } from './analysis.js'
 import { AUTONOMIES, LEVELS, PURPOSES, STAGES } from './library.js'
+import { JOURNEY_PROMPTS } from './journey.js'
+import { SERVER_INSTRUCTIONS, capabilityReport } from './orientation.js'
 import { PublicReadService } from './service.js'
 
 function result(payload: object, isError = false) {
@@ -48,7 +50,10 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     timeoutMs: config.timeoutMs,
     ...(options.fetcher ? { fetcher: options.fetcher } : {}),
   })
-  const server = new McpServer({ name: SERVER_NAME, version: PACKAGE_VERSION })
+  const server = new McpServer(
+    { name: SERVER_NAME, version: PACKAGE_VERSION },
+    { instructions: SERVER_INSTRUCTIONS },
+  )
 
   server.registerTool(
     PUBLIC_TOOL_NAMES[0],
@@ -139,7 +144,7 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     {
       title: 'Combine stacked signals honestly',
       description:
-        'Combine several agreeing signals into one honest edge estimate. Correlated sources are prevented from being counted as independent confirmations, because correlated evidence inflates confidence without inflating edge, and confidence is what sets position size. Supply a symbol to also cost-gate the combined result.',
+        'Combine several agreeing signals into one honest edge estimate. Repeats of one source are folded together, near-identical source names are treated as one feed, and correlated families are prevented from being counted as independent confirmations, because correlated evidence inflates confidence without inflating edge, and confidence is what sets position size. Supply a symbol to also cost-gate the combined result.',
       inputSchema: {
         signals: z
           .array(
@@ -147,6 +152,15 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
               source: z.string().trim().min(1).max(120),
               family: z.enum(SIGNAL_FAMILIES),
               claimedEdgeBps: z.number().finite().min(-10_000).max(100_000),
+              originId: z
+                .string()
+                .trim()
+                .min(1)
+                .max(120)
+                .optional()
+                .describe(
+                  'Identifier of the upstream this signal came from. Two signals sharing one are folded together, however different their source labels look.',
+                ),
             }),
           )
           .min(1)
@@ -269,6 +283,30 @@ export function createPublicServer(config: PublicMcpConfig, options: PublicServe
     },
     (input) => safely(() => service.paperSession(input)),
   )
+
+  server.registerTool(
+    'gryps_capabilities',
+    {
+      title: 'Describe what this server is and is not',
+      description:
+        'One call that explains the server: what it answers, what it refuses, which live sources it reads, and every known limitation with its consequence. Call this before reasoning about what the other tools can do, rather than inferring it from their descriptions.',
+      inputSchema: {},
+      annotations,
+    },
+    async () => result(capabilityReport(SERVER_NAME, PACKAGE_VERSION)),
+  )
+
+  // Native MCP prompts. Clients surface these in their own interface, so the
+  // guided journey is visible to someone who does not know to ask for it.
+  for (const prompt of JOURNEY_PROMPTS) {
+    server.registerPrompt(
+      prompt.id,
+      { title: prompt.title, description: prompt.summary },
+      () => ({
+        messages: [{ role: 'user' as const, content: { type: 'text' as const, text: prompt.body } }],
+      }),
+    )
+  }
 
   return server
 }

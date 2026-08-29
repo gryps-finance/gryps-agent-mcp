@@ -52,6 +52,7 @@ export const PUBLIC_TOOL_NAMES = [
   'gryps_next_step',
   'gryps_prompt_library',
   'gryps_paper_session',
+  'gryps_capabilities',
 ] as const
 
 export type PublicToolName = (typeof PUBLIC_TOOL_NAMES)[number]

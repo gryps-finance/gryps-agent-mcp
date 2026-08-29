@@ -101,3 +101,63 @@ test('an empty signal stack is refused rather than defaulted', () => {
     (error: unknown) => error instanceof PublicMcpError && error.code === 'invalid_configuration',
   )
 })
+
+test('folds a repeated source into one signal instead of counting it twice', () => {
+  const result = combineSignals([
+    { source: 'Teneo sentiment', family: 'social', claimedEdgeBps: 40 },
+    { source: 'Teneo sentiment', family: 'social', claimedEdgeBps: 35 },
+    { source: 'orderflow', family: 'onchain', claimedEdgeBps: 30 },
+  ])
+  assert.equal(result.suppliedSignalCount, 3)
+  assert.equal(result.independentSignalCount, 2)
+  assert.equal(result.echoesCollapsed.length, 1)
+  assert.equal(result.echoesCollapsed[0]?.echoOf, 'Teneo sentiment')
+  // The larger claim survives the fold, so nothing is understated.
+  assert.equal(result.largestSingleBps, 40)
+  assert.match(result.warnings.join(' '), /were echoes of another entry/)
+})
+
+test('a shared originId folds sources whose labels look nothing alike', () => {
+  const result = combineSignals([
+    { source: 'CryptoNewsWire', family: 'news', claimedEdgeBps: 50, originId: 'reuters-btc-etf' },
+    { source: 'Anon TG channel', family: 'social', claimedEdgeBps: 45, originId: 'reuters-btc-etf' },
+  ])
+  assert.equal(result.independentSignalCount, 1)
+  assert.equal(result.echoesCollapsed[0]?.source, 'Anon TG channel')
+  // One story relayed twice cannot beat the strongest single claim.
+  assert.equal(result.effectiveEdgeBps, 50)
+})
+
+test('near-identical source names are treated as one feed without being folded', () => {
+  const result = combineSignals([
+    { source: 'Teneo sentiment', family: 'social', claimedEdgeBps: 40 },
+    { source: 'Teneo sentiment v2', family: 'technical', claimedEdgeBps: 40 },
+  ])
+  assert.equal(result.independentSignalCount, 2)
+  assert.equal(result.suspectedEchoes.length, 1)
+  // Family priors alone would have said 0.2 here.
+  assert.equal(result.correlationUsed, 0.9)
+  assert.match(result.warnings.join(' '), /name what looks like the same feed/)
+})
+
+test('short distinct source labels are not mistaken for echoes', () => {
+  const result = combineSignals([
+    { source: 'RSI', family: 'technical', claimedEdgeBps: 40 },
+    { source: 'RS1', family: 'onchain', claimedEdgeBps: 40 },
+  ])
+  assert.equal(result.suspectedEchoes.length, 0)
+  assert.equal(result.independentSignalCount, 2)
+})
+
+test('the naive sum still counts every supplied signal, echoes included', () => {
+  const result = combineSignals([
+    { source: 'feed', family: 'social', claimedEdgeBps: 30 },
+    { source: 'feed', family: 'social', claimedEdgeBps: 30 },
+    { source: 'feed', family: 'social', claimedEdgeBps: 30 },
+  ])
+  // Naive stacking would have called this 90 bps of edge. It is 30.
+  assert.equal(result.naiveSumBps, 90)
+  assert.equal(result.effectiveEdgeBps, 30)
+  assert.equal(result.overstatementFactor, 3)
+  assert.equal(result.independentSignalCount, 1)
+})

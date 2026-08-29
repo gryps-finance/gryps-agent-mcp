@@ -9,7 +9,7 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 
 ## 1. Public read hardening (this package)
 
-- [x] Frozen four-tool public allowlist with boundary tests.
+- [x] Frozen public tool allowlist with boundary tests.
 - [x] Strict upstream schema validation, sanitised typed errors, versioned envelopes.
 - [x] Request timeout, redirect refusal, credential-free URL enforcement.
 - [x] Short-TTL cache with in-flight deduplication and bounded size.
@@ -21,7 +21,9 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
 - [x] CI on Linux and Windows with the full release verification chain.
 - [x] Measured friction floor with provenance and explicit lower-bound status.
 - [x] Cost gating of a claimed edge, source-agnostic, with untrusted-signal notice.
-- [x] Correlation-floored signal stacking.
+- [x] Correlation-floored signal stacking, including echo detection: exact
+      source repeats and shared `originId` fold together, near-identical source
+      names are floored at 0.9 correlation.
 - [x] Venue cost comparison by live book walk, including depth-exhaustion honesty.
 - [x] Market-count claim gated behind an unreconciled flag.
 - [ ] MCP `outputSchema` on every tool so clients can validate structured content.
@@ -30,11 +32,26 @@ Status legend: `[x]` done, `[~]` in progress, `[ ]` open.
       versus friction paid. The price-stream contract it waited for is
       satisfied v1 by polling the oracle read; a streaming upgrade follows the
       websocket item in section 3 if the backend ships one.
-- [ ] `gryps_prompt_library`: the open prompt manifest. Deferred pending the
-      entitlement split between open and paid prompts.
+- [x] `gryps_prompt_library`: the open prompt manifest, embedded rather than
+      read from disk so onboarding survives an unreachable venue.
+- [x] Fee direction reported as an interval, with verdict-stability checking in
+      `gryps_edge_check`, until the protocol team confirms the basis.
+- [x] Settlement identity pinned in-package and verified against the engine
+      report rather than relayed.
+- [x] Symbol discovery: curated alias table, exact-first ranking, and
+      edit-distance suggestions in both browse results and `not_found` errors.
 - [ ] Measure spread on v2 so the friction floor stops being a lower bound.
       This is the single highest-value open item: it converts the headline
-      number from a fee floor into all-in friction.
+      number from a fee floor into all-in friction. Blocked upstream, and now
+      demonstrably so: every order-book, depth, ticker, and quote path was
+      probed on 2026-08-29 and returns 404. The probe is pinned in
+      `SPREAD_SURFACE_PROBE` and re-runs cheaply when the engine changes.
+- [ ] Resolve the fee direction with the protocol team. Until then every cost
+      figure is an interval, and `gryps_route_compare` favouring Hyperliquid
+      depends on which reading is correct.
+- [ ] Use `fundingRate` from the newly found `/api/v1/market-data` surface.
+      Funding is a real holding cost this package does not yet charge, and the
+      same response carries mark price and 24h volume.
 - [ ] Structured stderr logging with `--log-level` (never stdout; stdio transport owns stdout).
 - [ ] Request correlation IDs threaded through envelopes and logs.
 - [ ] Circuit breaker + stale-while-revalidate cache so a flapping upstream degrades gracefully.

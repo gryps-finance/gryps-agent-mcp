@@ -27,6 +27,7 @@ test('public tool allowlist is frozen', () => {
     'gryps_next_step',
     'gryps_prompt_library',
     'gryps_paper_session',
+    'gryps_capabilities',
   ])
 })
 

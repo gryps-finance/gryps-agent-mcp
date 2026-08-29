@@ -29,7 +29,14 @@ for (const path of files) {
   assert.doesNotMatch(path, /^(src|test|scripts|node_modules|\.npm-cache)\//)
   assert.doesNotMatch(path, /(write|signer|private-key|engineWire)/i)
 }
-assert.ok(pack.unpackedSize < 300_000, `Package is unexpectedly large: ${pack.unpackedSize} bytes`)
+/**
+ * A ceiling on accidental inclusion, not a budget. The real boundary checks are
+ * the path and content assertions above; this one exists to catch node_modules
+ * or a stray build directory sneaking into the tarball. Raised from 300k when
+ * the package grew from four tools to thirteen plus the prompt library; roughly
+ * a third of the current size is source maps, which ship deliberately.
+ */
+assert.ok(pack.unpackedSize < 400_000, `Package is unexpectedly large: ${pack.unpackedSize} bytes`)
 
 /**
  * Founders-internal readiness content must never ship. Publishing an assessment

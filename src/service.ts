@@ -19,6 +19,7 @@ import {
 } from './paper.js'
 import { nextStep, queryLibrary, type LibraryFilter } from './library.js'
 import type { MarketRecord } from './schemas.js'
+import { expandQuery, matchesSubstring, nearestMarkets, normalise, relevanceRank } from './symbols.js'
 
 interface EnvelopeMeta {
   fetchedAt: string
@@ -113,31 +114,63 @@ function provenanceOf(sample: FrictionSample) {
   }
 }
 
-function normalise(value: string): string {
-  return value.trim().toUpperCase().replace(/[\s/_-]/g, '')
+export type ResolutionRoute = 'symbol' | 'display-name' | 'base-asset'
+
+export interface MarketResolution {
+  market: MarketRecord
+  requested: string
+  /** Set when the curated alias table rewrote the request before matching. */
+  aliasApplied: string | null
+  via: ResolutionRoute
 }
 
-export function resolveMarket(markets: MarketRecord[], requested: string): MarketRecord {
-  const target = normalise(requested)
-  const exactSymbol = markets.find((market) => normalise(market.symbol) === target)
-  if (exactSymbol) return exactSymbol
+function listCandidates(markets: MarketRecord[], searched: string): string {
+  const nearest = nearestMarkets(markets, searched)
+  if (nearest.length === 0) return ''
+  return ` Closest listed symbols: ${nearest.map((candidate) => candidate.market.symbol).join(', ')}.`
+}
 
-  const exactDisplay = markets.filter((market) => normalise(market.displayName) === target)
-  if (exactDisplay.length === 1 && exactDisplay[0]) return exactDisplay[0]
+/**
+ * Resolve one market. Exact matching only, after an exact-keyed alias rewrite:
+ * a curated alias is a rename, not a guess, so "bitcoin" and "matic" resolve
+ * while substring guessing stays refused. Every resolution reports the route it
+ * took, so a caller can see when an alias was applied on its behalf.
+ */
+export function resolveMarketDetailed(markets: MarketRecord[], requested: string): MarketResolution {
+  const { searched, aliasApplied } = expandQuery(requested)
+  const base = { requested, aliasApplied }
 
-  const exactBase = markets.filter((market) => normalise(market.baseAsset) === target)
-  if (exactBase.length === 1 && exactBase[0]) return exactBase[0]
+  const exactSymbol = markets.find((market) => normalise(market.symbol) === searched)
+  if (exactSymbol) return { ...base, market: exactSymbol, via: 'symbol' }
+
+  const exactDisplay = markets.filter((market) => normalise(market.displayName) === searched)
+  if (exactDisplay.length === 1 && exactDisplay[0]) {
+    return { ...base, market: exactDisplay[0], via: 'display-name' }
+  }
+
+  const exactBase = markets.filter((market) => normalise(market.baseAsset) === searched)
+  if (exactBase.length === 1 && exactBase[0]) return { ...base, market: exactBase[0], via: 'base-asset' }
   if (exactBase.length > 1) {
     throw new PublicMcpError(
       'ambiguous_symbol',
-      `"${requested}" matches more than one quote market. Use the full canonical symbol.`,
+      `"${requested}" matches more than one quote market: ${exactBase
+        .map((market) => market.symbol)
+        .join(', ')}. Use the full canonical symbol.`,
     )
   }
 
+  const aliasNote = aliasApplied ? ` (read as "${searched}")` : ''
   throw new PublicMcpError(
     'not_found',
-    `No exact Gryps v2 market was found for "${requested}". Use gryps_list_markets to find the canonical symbol.`,
+    `No exact Gryps v2 market was found for "${requested}"${aliasNote}.${listCandidates(
+      markets,
+      searched,
+    )} Use gryps_list_markets to browse the catalogue.`,
   )
+}
+
+export function resolveMarket(markets: MarketRecord[], requested: string): MarketRecord {
+  return resolveMarketDetailed(markets, requested).market
 }
 
 export interface PublicReadServiceOptions {
@@ -206,29 +239,63 @@ export class PublicReadService {
 
   async listMarkets(input: { query?: string; limit: number; offset: number }) {
     const markets = (await this.client.markets()).slice().sort((a, b) => a.symbol.localeCompare(b.symbol))
-    const query = input.query ? normalise(input.query) : null
-    const filtered = query
-      ? markets.filter((market) =>
-          [market.symbol, market.baseAsset, market.quoteAsset, market.displayName]
-            .map(normalise)
-            .some((value) => value.includes(query)),
-        )
-      : markets
+    if (!input.query) {
+      return envelope(
+        {
+          total: markets.length,
+          offset: input.offset,
+          limit: input.limit,
+          query: null,
+          markets: markets.slice(input.offset, input.offset + input.limit),
+        },
+        [`${this.client.apiSource}/markets`],
+        ['A listed market is not a promise that an executable quote is available.'],
+      )
+    }
+
+    // Alias first, then substring, then near misses. A search that finds
+    // nothing should say what the caller probably meant, not return an empty
+    // list and let an agent conclude the market does not exist.
+    const { requested, searched, aliasApplied } = expandQuery(input.query)
+    const matched = markets
+      .filter((market) => matchesSubstring(market, searched))
+      .sort(
+        (a, b) => relevanceRank(a, searched) - relevanceRank(b, searched) || a.symbol.localeCompare(b.symbol),
+      )
+    const fuzzy = matched.length === 0 ? nearestMarkets(markets, searched, 5) : []
+    const filtered = matched.length > 0 ? matched : fuzzy.map((candidate) => candidate.market)
+    const matchMode = matched.length > 0 ? (aliasApplied ? 'alias' : 'substring') : fuzzy.length > 0 ? 'nearest' : 'none'
+
     return envelope(
       {
         total: filtered.length,
         offset: input.offset,
         limit: input.limit,
+        query: { requested, searched, aliasApplied, matchMode },
         markets: filtered.slice(input.offset, input.offset + input.limit),
       },
       [`${this.client.apiSource}/markets`],
-      ['A listed market is not a promise that an executable quote is available.'],
+      [
+        'A listed market is not a promise that an executable quote is available.',
+        ...(aliasApplied
+          ? [`"${requested}" was read as "${searched}" from the curated alias table before searching.`]
+          : []),
+        ...(matchMode === 'nearest'
+          ? [
+              `Nothing matched "${searched}". These are the nearest listed symbols by name similarity, not matches. Confirm one before using it.`,
+            ]
+          : []),
+        ...(matchMode === 'none'
+          ? [`Nothing matched "${searched}" and no listed symbol is close to it. This market is probably not listed.`]
+          : []),
+      ],
     )
   }
 
   async getMarket(input: { symbol: string }) {
     const markets = await this.client.markets()
-    const market = resolveMarket(markets, input.symbol)
+    const resolution = resolveMarketDetailed(markets, input.symbol)
+    const market = resolution.market
     const [prices, risk] = await Promise.all([this.client.prices(), this.client.riskConfig()])
     const price = prices.find((candidate) => normalise(candidate.symbol) === normalise(market.symbol))
     const marketRisk = risk.symbols[market.symbol]
@@ -236,6 +303,11 @@ export class PublicReadService {
     return envelope(
       {
         market,
+        resolution: {
+          requested: resolution.requested,
+          aliasApplied: resolution.aliasApplied,
+          via: resolution.via,
+        },
         price: price
           ? {
               usd: Number(price.price) / PRICE_SCALE,
@@ -261,6 +333,11 @@ export class PublicReadService {
               'The engine listed this market but returned no current price record. The market is real; the price is unavailable, not zero.',
             ]),
         ...(marketRisk ? [] : ['No risk configuration was returned for this canonical symbol.']),
+        ...(resolution.aliasApplied
+          ? [
+              `"${resolution.requested}" was resolved through the curated alias table to "${resolution.aliasApplied}". Confirm this is the market you meant.`,
+            ]
+          : []),
         'Price is decoded from the engine 1e6 fixed-point representation.',
       ],
     )
@@ -418,7 +495,7 @@ export class PublicReadService {
     const gate = checkEdge(
       {
         symbol: market.symbol,
-        source: `stacked:${result.distinctFamilies.join('+')}`,
+        source: `stacked:${result.independentSignalCount}x${result.distinctFamilies.join('+')}`,
         claimedEdgeBps: result.effectiveEdgeBps,
       },
       sample.quote,

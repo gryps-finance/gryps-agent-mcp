@@ -239,3 +239,96 @@ test('venue status verifies a settlement identity that matches the pin', async (
   assert.deepEqual(response.data.settlement.mismatches, [])
   assert.doesNotMatch(response.meta.limitations.join(' '), /SETTLEMENT IDENTITY/)
 })
+
+test('resolves a common name through the alias table and reports the route', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.getMarket({ symbol: 'bitcoin' })
+  assert.equal(response.data.market.symbol, 'BTCUSDT')
+  assert.equal(response.data.resolution.aliasApplied, 'BTC')
+  assert.equal(response.data.resolution.via, 'base-asset')
+  assert.match(response.meta.limitations.join(' '), /resolved through the curated alias table/)
+})
+
+test('an exact symbol resolves without an alias', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.getMarket({ symbol: 'BTCUSDT' })
+  assert.equal(response.data.resolution.aliasApplied, null)
+  assert.equal(response.data.resolution.via, 'symbol')
+  assert.doesNotMatch(response.meta.limitations.join(' '), /alias table/)
+})
+
+test('a failed resolution names the nearest listed symbols instead of just failing', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  await assert.rejects(
+    () => service.getMarket({ symbol: 'BTCUSD' }),
+    (error: unknown) =>
+      error instanceof PublicMcpError &&
+      error.code === 'not_found' &&
+      /Closest listed symbols: BTCUSDT/.test(error.message),
+  )
+})
+
+test('an ambiguous base asset names the markets it matched', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({
+      config: testConfig,
+      fetcher: fixtureFetch({
+        '/api/v1/markets': {
+          markets: [
+            { symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', displayName: 'BTC/USDT', pricePrecision: 2, quantityPrecision: 3 },
+            { symbol: 'BTCUSDC', baseAsset: 'BTC', quoteAsset: 'USDC', displayName: 'BTC/USDC', pricePrecision: 2, quantityPrecision: 3 },
+          ],
+        },
+      }),
+    }),
+  )
+  await assert.rejects(
+    () => service.getMarket({ symbol: 'bitcoin' }),
+    (error: unknown) =>
+      error instanceof PublicMcpError &&
+      error.code === 'ambiguous_symbol' &&
+      /BTCUSDT, BTCUSDC/.test(error.message),
+  )
+})
+
+test('browsing by a common name finds the market instead of returning nothing', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  // This is the search that used to return zero results.
+  const response = await service.listMarkets({ query: 'bitcoin', limit: 50, offset: 0 })
+  // PUMPBTCUSDT contains BTC too, so it is a hit — but the market the caller
+  // meant has to come first.
+  assert.equal(response.data.total, 2)
+  assert.equal(response.data.markets[0]?.symbol, 'BTCUSDT')
+  assert.equal(response.data.query?.matchMode, 'alias')
+  assert.equal(response.data.query?.aliasApplied, 'BTC')
+  assert.match(response.meta.limitations.join(' '), /was read as "BTC" from the curated alias table/)
+})
+
+test('browsing a near miss returns ranked suggestions labelled as guesses', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  // BTCUSD is a substring of BTCUSDT, so it matches outright; BTCUSDX does not.
+  const response = await service.listMarkets({ query: 'BTCUSDX', limit: 50, offset: 0 })
+  assert.equal(response.data.query?.matchMode, 'nearest')
+  assert.equal(response.data.markets[0]?.symbol, 'BTCUSDT')
+  assert.match(response.meta.limitations.join(' '), /nearest listed symbols by name similarity, not matches/)
+})
+
+test('browsing something genuinely absent says so rather than guessing', async () => {
+  const service = new PublicReadService(
+    new EngineReadClient({ config: testConfig, fetcher: fixtureFetch() }),
+  )
+  const response = await service.listMarkets({ query: 'toncoin', limit: 50, offset: 0 })
+  assert.equal(response.data.total, 0)
+  assert.equal(response.data.query?.matchMode, 'none')
+  assert.match(response.meta.limitations.join(' '), /probably not listed/)
+})

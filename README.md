@@ -48,36 +48,57 @@ Then ask your client:
 |---|---|
 | `gryps_friction_floor` | The round-trip cost a trade must beat, decomposed into fees and spread with full provenance. The number that decides whether a trade is worth making. |
 | `gryps_edge_check` | Cost-gate a claimed edge from any upstream signal source. Answers whether the claimed magnitude survives execution, never whether the signal is true. |
-| `gryps_signal_stack` | Combine several agreeing signals honestly. Prevents correlated sources from being counted as independent confirmations. |
+| `gryps_signal_stack` | Combine several agreeing signals honestly. Folds repeats of one source into a single signal, treats near-identical source names as one feed, and prevents correlated families from being counted as independent confirmations. |
 | `gryps_route_compare` | Compare round-trip cost on Gryps against a public order-book venue priced by walking its live displayed depth. |
 | `gryps_indicative_quote` | An indicative, non-firm execution estimate for one clip: oracle mid, estimated entry, and the all-in cost model. Derived, and labeled as such: the engine exposes no quote surface. |
 | `gryps_reference_price` | The live Gryps oracle price next to an external fair-value mid, with divergence in bps. The anchor for oracle sanity checks and paper-session pricing. |
-| `gryps_list_markets` | Browse the live v2 market catalogue with bounded search and pagination. |
-| `gryps_get_market` | Resolve one exact symbol or unique base asset and return live price and leverage limits. |
+| `gryps_list_markets` | Browse the live v2 market catalogue with bounded search and pagination. Searches by common name (`bitcoin`, `matic`), and when nothing matches, names the nearest listed symbols as explicit guesses. |
+| `gryps_get_market` | Resolve one exact symbol, common name, or unique base asset and return live price and leverage limits. Reports which route resolved it. |
 | `gryps_get_fee_schedule` | The engine-reported fee tier ladder. |
+| `gryps_capabilities` | One call describing what the server answers, what it refuses, what it reads, and every known limitation with its consequence. |
 | `gryps_next_step` | Ask what to do next. On a fresh install it returns one starting point rather than a catalogue, then routes the journey from there. |
 | `gryps_prompt_library` | Browse 25 staged prompts by journey stage, experience level, purpose or free text. Each says what it does and why it matters. |
 | `gryps_paper_session` | Rehearse trades against live prices with zero capital. Every close decomposes the result into price move versus friction paid. No order exists anywhere. |
-| `gryps_venue_status` | API health, build version, settlement chain, and contract. |
+| `gryps_venue_status` | API health, build version, and settlement identity checked against the chain and contract pinned in this package rather than relayed from the endpoint. |
 
 All tools are annotated read-only and non-destructive. Every response uses a
 versioned JSON envelope naming its live source, fetch time, and limitations.
+
+## What an agent is told on connect
+
+The server sends MCP  on initialize, so any client passes them to
+the model as standing context without the user doing anything. They frame the
+server as a cost gate rather than an idea source, point a new install at
+, and name the four ways an agent could mislead someone with
+these tools.
+
+The seven journey prompts are also exposed as native MCP prompts, so clients
+that render prompts surface the guided path in their own interface. A tool has
+to be invoked; a prompt is presented.
 
 ## The four honesty rules
 
 These are structural, not stylistic. They are enforced by tests.
 
 **Friction is a lower bound until spread is measured.** The engine reports fee
-tiers. Spread is not yet measured on v2, so `gryps_friction_floor` reports a
-*measured fee floor*, flags `isLowerBound: true`, and says plainly that true
-friction is higher. It is never presented as all-in friction.
+tiers. The public v2 engine exposes no bid/ask or depth surface at all — every
+order-book, depth, ticker, and quote path was probed and returns 404 — so spread
+is absent upstream rather than merely unwired here. `gryps_friction_floor`
+therefore reports a *measured fee floor*, flags `isLowerBound: true`, carries
+the probe result in `spreadSurface`, and says plainly that true friction is
+higher. It is never presented as all-in friction.
 
-**Fee direction is unverified.** The engine does not state whether
-`totalFeeRateBps` is per side or a round trip. This server assumes per side and
-doubles it, which is the conservative reading, and carries that assumption in
-every response so it cannot be silently inherited. Once the protocol team
-confirms, `--fee-is-round-trip=true` flips it. The assumption is material: it
-roughly halves the reported floor.
+**Fee direction is unverified, so both readings travel together.** The engine
+does not state whether `totalFeeRateBps` is per side or a round trip, and the
+answer is worth a factor of two. The headline number takes the conservative
+per-side reading, and every response also carries the other one:
+`gryps_friction_floor` returns `feeDirectionRange` with both round trips and
+both break-even edges, and `gryps_edge_check` re-runs the gate against the
+alternative and reports whether the verdict survives it. A verdict that flips
+depending on an unresolved question is reported as not decidable from live data,
+not as a decision. The flag is three-state: unset means unresolved,
+`--fee-is-round-trip=true` and `=false` both mean an operator has confirmed the
+basis, and the responses say which.
 
 **Third-party signal text is untrusted input.** A sentiment or news tool relays
 text written by strangers. Every response that touches a claimed edge carries a
@@ -103,6 +124,13 @@ An agent must not present it to a user as a price the venue offered.
 - It will not repeat the engine market count as a fact. That count has not been
   reconciled with published documentation, so it is returned flagged as
   unpublishable rather than quoted.
+- It will not take an endpoint's word for what it is. The settlement chain and
+  contract are pinned in this package and compared against what the engine
+  reports, because a wrong or hostile endpoint describes itself with exactly the
+  same confidence as the right one.
+- It will not guess a symbol. Common names are rewritten through a curated alias
+  table before exact matching, and near misses are returned as labelled
+  suggestions. Neither ever resolves a market on your behalf by similarity.
 - It will not trade, sign, hold assets, or read your account.
 
 ## Configuration
@@ -123,7 +151,7 @@ npx -y gryps-agent-mcp@alpha \
 | `--timeout-ms=`, `--cache-ttl-ms=` | Upstream request timeout and read cache TTL. |
 | `--comparison-url=` | Order-book venue for `gryps_route_compare`. Use `off` to disable venue comparison entirely. |
 | `--comparison-taker-fee-bps=` | Taker fee assumed for the comparison venue, per leg. An assumption, stated in every response. |
-| `--fee-is-round-trip=true` | Set only once the protocol team confirms the engine reports a full round trip. |
+| `--fee-is-round-trip=` | Declare the fee basis once the protocol team confirms it. Unset means unresolved and both readings are reported; `true` roughly halves the reported floor; `false` confirms the per-side reading the server already assumes. |
 | `--spread-bps-per-side=` | Supply an operator-measured spread. Doing so stops friction being reported as a lower bound. |
 | `--help`, `--version` | Print usage or version and exit. |
 

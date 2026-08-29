@@ -21,6 +21,7 @@
 
 import { PROMPT_MANIFEST } from './library-data.js'
 import { PublicMcpError } from './errors.js'
+import { journeyPromptBody } from './journey.js'
 
 export const STAGES = ['land', 'orient', 'shape', 'rehearse', 'fund', 'operate'] as const
 export const LEVELS = ['never-used-an-agent', 'used-agents', 'traded-perps', 'built-bots'] as const
@@ -131,12 +132,18 @@ export function queryLibrary(filter: LibraryFilter = {}): LibraryResult {
   }
 }
 
+export interface RecommendedPrompt extends PromptEntry {
+  /** The text to run. Absent for prompts whose body is not yet written. */
+  promptBody: string | null
+  bodyStatus: 'available' | 'not-yet-written'
+}
+
 export interface NextStepResult {
   libraryVersion: string
   journeySpine: string[]
   currentPromptId: string | null
   stagePosition: string
-  recommended: PromptEntry[]
+  recommended: RecommendedPrompt[]
   reason: string
   capabilityBoundary: string
 }
@@ -149,6 +156,15 @@ const CAPABILITY_BOUNDARY =
  * of the spine rather than a catalogue, because the common failure of a fresh
  * install is not too few options but too many.
  */
+function withBody(prompt: PromptEntry): RecommendedPrompt {
+  const journey = journeyPromptBody(prompt.id)
+  return {
+    ...prompt,
+    promptBody: journey?.body ?? null,
+    bodyStatus: journey ? 'available' : 'not-yet-written',
+  }
+}
+
 export function nextStep(input: { currentPromptId?: string | undefined; fundStationComplete?: boolean | undefined } = {}): NextStepResult {
   const funded = input.fundStationComplete === true
   const byId = new Map(PROMPT_MANIFEST.prompts.map((prompt) => [prompt.id, prompt]))
@@ -167,7 +183,7 @@ export function nextStep(input: { currentPromptId?: string | undefined; fundStat
       ...base,
       currentPromptId: null,
       stagePosition: first ? `start of the journey (${first.stage})` : 'unknown',
-      recommended: first ? [first] : [],
+      recommended: first ? [withBody(first)] : [],
       reason: 'Fresh start. Begin at the top of the journey spine rather than browsing the whole library.',
     }
   }
@@ -194,7 +210,7 @@ export function nextStep(input: { currentPromptId?: string | undefined; fundStat
       spineIndex >= 0
         ? `step ${spineIndex + 1} of ${spine.length} on the spine (${current.stage})`
         : `off-spine prompt in the ${current.stage} stage`,
-    recommended: surfaceable,
+    recommended: surfaceable.map(withBody),
     reason: surfaceable.length
       ? `After ${current.id} (${current.stage}), the journey continues to: ${surfaceable.map((p) => `${p.id} (${p.stage})`).join(', ')}.`
       : `Every next step after ${current.id} sits above the money line (${PROMPT_MANIFEST.moneyLine}) and is withheld until the funding station is complete. That is the gate working, not an error.`,
