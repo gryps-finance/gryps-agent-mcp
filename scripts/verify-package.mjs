@@ -10,8 +10,11 @@ const output = execFileSync(process.execPath, [npmCli, 'pack', '--dry-run', '--j
   encoding: 'utf8',
   env: { ...process.env, npm_config_update_notifier: 'false' },
 })
-const [pack] = JSON.parse(output)
-assert.ok(pack)
+// npm pack --json emits an array of results through npm 11; npm 12 emits an
+// object keyed by package name.
+const parsed = JSON.parse(output)
+const pack = Array.isArray(parsed) ? parsed[0] : parsed.files ? parsed : Object.values(parsed)[0]
+assert.ok(pack?.files)
 const files = pack.files.map((file) => file.path)
 for (const required of [
   'package.json',
