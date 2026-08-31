@@ -16,7 +16,10 @@ try {
     [npmCli, 'pack', '--json', '--ignore-scripts', '--pack-destination', temporaryRoot],
     { cwd: packageRoot, encoding: 'utf8', env: { ...process.env, npm_config_update_notifier: 'false' } },
   )
-  const [pack] = JSON.parse(packOutput)
+  // npm pack --json emits an array of results through npm 11; npm 12 emits an
+  // object keyed by package name.
+  const parsed = JSON.parse(packOutput)
+  const pack = Array.isArray(parsed) ? parsed[0] : parsed.filename ? parsed : Object.values(parsed)[0]
   assert.ok(pack?.filename)
   const tarball = join(temporaryRoot, pack.filename)
   assert.ok(existsSync(tarball))
