@@ -20,13 +20,16 @@ below will fail confusingly on an older runtime.
 
 ## Which install to use
 
-The package is published. The GitHub form runs the unreleased main branch and
-is useful for testing changes before a release.
+The package is published, but npm is one release behind the main branch.
 
-| Situation | Use |
-|---|---|
-| Normal use | `gryps-agent-mcp@alpha` |
-| Testing unreleased changes | `github:gryps-finance/gryps-agent-mcp` |
+| Install | Version | What you get |
+|---|---|---|
+| `gryps-agent-mcp@alpha` | `0.2.0-alpha.2` | Ten tools: markets, venue status, fee schedule, friction floor, edge check, signal stack, route compare, indicative quote, reference price. |
+| `github:gryps-finance/gryps-agent-mcp` | `0.2.0-alpha.3`, unreleased | All eighteen tools, the `--verify` self-audit, the guided journey (`gryps_next_step`, `gryps_prompt_library`, native MCP prompts), paper sessions, chain-measured fees, margin, sizing and funding. |
+
+Use `@alpha` if you only need the cost gate. Use the GitHub form if you want
+anything in the second row. Once `0.2.0-alpha.3` is published, `@alpha` will
+carry all of it.
 
 ## Step 1: confirm it runs
 
@@ -43,8 +46,11 @@ reports "server failed to start".
 ## Step 1b: check the boundary for yourself (optional)
 
 ```bash
-npx -y gryps-agent-mcp@alpha --verify
+npx -y github:gryps-finance/gryps-agent-mcp --verify
 ```
+
+`--verify` is not in `0.2.0-alpha.2`, which rejects it as an unknown argument,
+so this step needs the GitHub form until `0.2.0-alpha.3` is published.
 
 This audits the copy on your machine for signing, key handling, order
 placement, withdrawals, listeners, and subprocesses, and lists every network
@@ -83,7 +89,7 @@ claude mcp add gryps -- npx -y gryps-agent-mcp@alpha
 ### Codex and other MCP clients
 
 Use the same command and arguments in whatever form your client expects. The
-server speaks MCP over stdio and takes no environment variables.
+server speaks MCP over stdio and reads no environment variables.
 
 ### Testing unreleased changes
 
@@ -94,39 +100,45 @@ main branch. The first run is slower because it builds from source.
 
 Ask your assistant:
 
+> Use Gryps to check the venue status, then tell me the friction floor for BTC.
+
+This works on either install. A working connection returns a healthy venue, a
+build version, and a round-trip cost in basis points with its provenance. If
+the assistant answers from general knowledge instead of calling a tool, the
+server is not connected.
+
+On the GitHub form you can also ask:
+
 > Ask Gryps what I should do first.
 
 That calls `gryps_next_step`, which returns one starting point rather than a
 catalogue. Follow it, then ask for the next step again to walk the journey.
 
-If you would rather test the data path directly:
-
-> Use Gryps to check the venue status, then tell me the friction floor for BTC.
-
-A working connection returns a healthy venue, a build version, and a
-round-trip cost in basis points with its provenance. If the assistant answers
-from general knowledge instead of calling a tool, the server is not connected.
-
 ## What you can ask
 
-| Question | Tool it uses |
-|---|---|
-| What does it actually cost to trade BTC right now? | `gryps_friction_floor` |
-| A feed claims a 15 bps move. Is that worth trading? | `gryps_edge_check` |
-| Four sources agree. Is that really four confirmations? | `gryps_signal_stack` |
-| Where is a $250k BTC clip cheapest to execute? | `gryps_route_compare` |
-| What would a $100k BTC clip actually look like? | `gryps_indicative_quote` |
-| Is the Gryps price in line with the wider market? | `gryps_reference_price` |
-| Which markets exist, and what is BTC priced at? | `gryps_list_markets`, `gryps_get_market` |
-| What do fills actually pay, not what is advertised? | `gryps_measured_fees` |
-| Is the venue healthy, and on which chain? | `gryps_venue_status` |
-| What is this coin called here? | `gryps_list_markets` |
-| Where does this position get liquidated? | `gryps_margin_profile` |
-| How big should this position be? | `gryps_position_size` |
-| What does it cost to hold this overnight? | `gryps_funding_cost` |
-| I just installed this. What do I do? | `gryps_next_step` |
-| What else can I ask, for my experience level? | `gryps_prompt_library` |
-| Can I rehearse a trade without risking anything? | `gryps_paper_session` |
+Tools marked "main" are in `0.2.0-alpha.3` and need the GitHub form until it is
+published.
+
+| Question | Tool it uses | On `@alpha` |
+|---|---|---|
+| What does it actually cost to trade BTC right now? | `gryps_friction_floor` | yes |
+| A feed claims a 15 bps move. Is that worth trading? | `gryps_edge_check` | yes |
+| Four sources agree. Is that really four confirmations? | `gryps_signal_stack` | yes |
+| Where is a $250k BTC clip cheapest to execute? | `gryps_route_compare` | yes |
+| What would a $100k BTC clip actually look like? | `gryps_indicative_quote` | yes |
+| Is the Gryps price in line with the wider market? | `gryps_reference_price` | yes |
+| Which markets exist, and what is BTC priced at? | `gryps_list_markets`, `gryps_get_market` | yes |
+| What fee tiers does the venue advertise? | `gryps_get_fee_schedule` | yes |
+| Is the venue healthy, and on which chain? | `gryps_venue_status` | yes |
+| What is this coin called here? | `gryps_list_markets` | yes, but common-name aliases and nearest-symbol suggestions are main only |
+| What do fills actually pay, not what is advertised? | `gryps_measured_fees` | main |
+| Where does this position get liquidated? | `gryps_margin_profile` | main |
+| How big should this position be? | `gryps_position_size` | main |
+| What does it cost to hold this overnight? | `gryps_funding_cost` | main |
+| What can this server do, and what will it refuse? | `gryps_capabilities` | main |
+| I just installed this. What do I do? | `gryps_next_step` | main |
+| What else can I ask, for my experience level? | `gryps_prompt_library` | main |
+| Can I rehearse a trade without risking anything? | `gryps_paper_session` | main |
 
 ## Read the answers correctly
 
@@ -191,18 +203,18 @@ of stopping at "not found". Confirm one before using it.
 
 ## If something breaks
 
-**`'gryps-agent-mcp' is not recognized`** — an old cached copy from before the
+**`'gryps-agent-mcp' is not recognized`**: an old cached copy from before the
 build fix. Clear it with `npx clear-npx-cache` or delete the `_npx` folder in
 your npm cache, then retry.
 
-**Server starts but every tool errors with `upstream_unavailable`** — the live
+**Server starts but every tool errors with `upstream_unavailable`**: the live
 Gryps endpoint is unreachable from your network. Check with:
 
 ```bash
 curl -s https://perps-api.orbs.network/health
 ```
 
-**Tools do not appear after editing config** — fully quit and reopen the client.
+**Tools do not appear after editing config**: fully quit and reopen the client.
 
 ## Running from a clone instead
 
@@ -231,12 +243,14 @@ Then point the client at the built entry point with an absolute path:
 
 ## Options worth knowing
 
-All configuration is explicit command-line arguments. The server reads no
-environment variables.
+All configuration is explicit command-line arguments in `--name=value` form.
+The server reads no environment variables.
 
 | Flag | Use |
 |---|---|
-| `--comparison-url=off` | Disable venue comparison so the server contacts only Gryps. |
+| `--comparison-url=off` | Disable venue comparison. `gryps_route_compare` and `gryps_reference_price` then report the comparison as disabled. |
+| `--explorer-url=off` | Disable the block explorer read behind `gryps_measured_fees` (main only). With this and `--comparison-url=off`, the server contacts only Gryps. |
 | `--fee-is-round-trip=` | Declare the fee basis once the protocol team confirms it. Unset means unresolved; `true` roughly halves the reported floor; `false` confirms the per-side reading already assumed. |
 | `--spread-bps-per-side=8` | Supply a measured spread. Stops friction being reported as a lower bound. |
-| `--help` | Full list. |
+| `--timeout-ms=`, `--cache-ttl-ms=` | Upstream timeout and read cache TTL, 1 to 60000 ms. Both default to 10000. |
+| `--help` | Usage. It does not list every flag; [README.md](README.md#configuration) has the complete table. |
