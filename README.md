@@ -24,6 +24,21 @@ npx -y gryps-agent-mcp@alpha
 
 To run the unreleased main branch instead: `npx -y github:gryps-finance/gryps-agent-mcp`.
 
+### Release status
+
+The version on npm under `@alpha` is `0.2.0-alpha.2`. It ships the first ten
+tools: `gryps_list_markets`, `gryps_get_market`, `gryps_venue_status`,
+`gryps_friction_floor`, `gryps_get_fee_schedule`, `gryps_edge_check`,
+`gryps_signal_stack`, `gryps_route_compare`, `gryps_indicative_quote` and
+`gryps_reference_price`.
+
+Everything else this README describes is on the main branch as
+`0.2.0-alpha.3`, which is not yet published: the other eight tools, the
+`--verify` self-audit, `--explorer-url`, the MCP `instructions` sent on
+initialise, and the native MCP prompts. Until it is published, use the
+`github:gryps-finance/gryps-agent-mcp` form to get them. See
+[CHANGELOG.md](CHANGELOG.md) for the full difference.
+
 Example MCP client configuration:
 
 ```json
@@ -49,11 +64,11 @@ Then ask your client:
 | `gryps_friction_floor` | The round-trip cost a trade must beat, decomposed into fees and spread with full provenance. The number that decides whether a trade is worth making. |
 | `gryps_edge_check` | Cost-gate a claimed edge from any upstream signal source. Answers whether the claimed magnitude survives execution, never whether the signal is true. |
 | `gryps_signal_stack` | Combine several agreeing signals honestly. Folds repeats of one source into a single signal, treats near-identical source names as one feed, and prevents correlated families from being counted as independent confirmations. |
-| `gryps_margin_profile` | Where the position gets liquidated. Turns the venue published maintenance-margin ladder into the bracket, margin, leverage ceiling, and adverse move a size can absorb — and whether it survives long enough for the expected move to arrive. |
+| `gryps_margin_profile` | Where the position gets liquidated. Turns the venue's published maintenance-margin ladder into the bracket, margin, leverage ceiling, and adverse move a size can absorb, and whether it survives long enough for the expected move to arrive. |
 | `gryps_position_size` | How large. Bounded by the cost gate, the risk budget, the venue brackets, and survivability, reporting the largest size every constraint allows and naming the one that binds. |
 | `gryps_funding_cost` | What holding costs, beside what entering costs. Over a long hold, carry can exceed the round trip entirely. |
 | `gryps_route_compare` | Compare round-trip cost on Gryps against a public order-book venue priced by walking its live displayed depth. |
-| `gryps_indicative_quote` | An indicative, non-firm execution estimate for one clip: oracle mid, estimated entry, and the all-in cost model. Derived, and labeled as such: the engine exposes no quote surface. |
+| `gryps_indicative_quote` | An indicative, non-firm execution estimate for one clip: oracle mid, estimated entry, and the all-in cost model. Derived, and labelled as such: the engine exposes no quote surface. |
 | `gryps_reference_price` | The live Gryps oracle price next to an external fair-value mid, with divergence in bps. The anchor for oracle sanity checks and paper-session pricing. |
 | `gryps_list_markets` | Browse the live v2 market catalogue with bounded search and pagination. Searches by common name (`bitcoin`, `matic`), and when nothing matches, names the nearest listed symbols as explicit guesses. |
 | `gryps_get_market` | Resolve one exact symbol, common name, or unique base asset and return live price and leverage limits. Reports which route resolved it. |
@@ -70,7 +85,7 @@ versioned JSON envelope naming its live source, fetch time, and limitations.
 
 ## What an agent is told on connect
 
-The server sends MCP `instructions` on initialize, so any client passes them to
+The server sends MCP `instructions` in its `initialize` response, so any client passes them to
 the model as standing context without the user doing anything. They frame the
 server as a cost gate rather than an idea source, point a new install at
 `gryps_next_step`, and name the four ways an agent could mislead someone with
@@ -102,8 +117,8 @@ cost several times the round trip this package has been gating on.
 These are structural, not stylistic. They are enforced by tests.
 
 **Friction is a lower bound until spread is measured.** The engine reports fee
-tiers. The public v2 engine exposes no bid/ask or depth surface at all — every
-order-book, depth, ticker, and quote path was probed and returns 404 — so spread
+tiers. The public v2 engine exposes no bid/ask or depth surface at all. Every
+order-book, depth, ticker, and quote path was probed and returns 404, so spread
 is absent upstream rather than merely unwired here. `gryps_friction_floor`
 therefore reports a *measured fee floor*, flags `isLowerBound: true`, carries
 the probe result in `spreadSurface`, and says plainly that true friction is
@@ -156,18 +171,25 @@ An agent must not present it to a user as a price the venue offered.
 
 ## Verify the boundary yourself
 
-The read-only claim is only worth what a stranger can check. Every installed
-copy audits itself:
+The read-only claim is only worth what a stranger can check. Every installed copy
+from `0.2.0-alpha.3` onward audits itself:
 
 ```bash
-npx -y gryps-agent-mcp@alpha --verify
+npx -y github:gryps-finance/gryps-agent-mcp --verify
 ```
+
+`--verify` arrived in `0.2.0-alpha.3`. The `0.2.0-alpha.2` build on npm does not
+have it and rejects the flag as an unknown argument, so use the GitHub form
+above until `0.2.0-alpha.3` is published, then `gryps-agent-mcp@alpha --verify`.
 
 It scans the JavaScript actually installed on your machine for the capabilities
 this package promises never to have: transaction signing, private keys, wallet
 clients, order placement, withdrawals, network listeners, environment
 configuration, and subprocesses. It also lists every network destination present
-in the shipped code, so you can see exactly where it is able to reach.
+in the shipped code, so you can see exactly where it is able to reach. At the
+time of writing there are three: the Gryps v2 read API, the public order-book
+venue used for comparison and reference prices, and the public block explorer
+used for chain-measured fees.
 
 Add `--json` for machine-readable output. A failed audit exits non-zero, so a
 pipeline can gate on it.
@@ -192,11 +214,17 @@ npx -y gryps-agent-mcp@alpha \
 |---|---|
 | `--api-base=`, `--health-url=` | Override the Gryps read endpoints. HTTPS only, except loopback. |
 | `--timeout-ms=`, `--cache-ttl-ms=` | Upstream request timeout and read cache TTL. |
-| `--comparison-url=` | Order-book venue for `gryps_route_compare`. Use `off` to disable venue comparison entirely. |
+| `--comparison-url=` | Order-book venue for `gryps_route_compare` and `gryps_reference_price`. Use `off` to disable venue comparison entirely. |
 | `--comparison-taker-fee-bps=` | Taker fee assumed for the comparison venue, per leg. An assumption, stated in every response. |
 | `--fee-is-round-trip=` | Declare the fee basis once the protocol team confirms it. Unset means unresolved and both readings are reported; `true` roughly halves the reported floor; `false` confirms the per-side reading the server already assumes. |
 | `--spread-bps-per-side=` | Supply an operator-measured spread. Doing so stops friction being reported as a lower bound. |
-| `--help`, `--version` | Print usage or version and exit. |
+| `--explorer-url=` | Public block explorer for `gryps_measured_fees`. Use `off` to disable that outbound host. |
+| `--verify`, `--verify --json` | Run the self-audit described above and exit. |
+| `--help`, `--version` | Print usage or version and exit. `--help` lists only the endpoint, timeout and cache flags plus these, so this table is the complete list. |
+
+With both `--comparison-url=off` and `--explorer-url=off`, the server contacts
+only the Gryps read endpoints. Every value must be passed as `--name=value`;
+anything else is rejected with the list of known arguments.
 
 Query strings and fragments are stripped from configured endpoints. Upstream
 reads are cached briefly, deduplicated in flight, retried once on transient
@@ -210,11 +238,14 @@ npm run verify:release
 npm run smoke:live
 ```
 
-`verify:release` type-checks, tests, builds, exercises the MCP handshake, and
-inspects the npm tarball allowlist. `smoke:live` separately verifies the live
-endpoint, the friction floor, the cost gate, and venue comparison, because it
-requires network access. CI runs the same chain on Linux and Windows plus a
-nightly live-contract check for upstream drift.
+`verify:release` cleans, type-checks, tests, builds, exercises the MCP handshake
+and the self-audit, inspects the npm tarball allowlist, and starts the packed
+binary from a clean install. `smoke:live` separately verifies the live endpoint,
+the friction floor, the cost gate, signal stacking, venue comparison, the
+indicative quote, and the reference price, because it requires network access.
+CI runs the public and internal type-checks, tests and builds plus the smoke and
+package checks on Linux (Node 22 and 24) and Windows (Node 22), with a nightly
+live-contract check for upstream drift.
 
 See [CONNECT.md](CONNECT.md) to connect an agent in two minutes,
 [ARCHITECTURE.md](ARCHITECTURE.md) for the capability split,

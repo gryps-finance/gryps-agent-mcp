@@ -2,6 +2,22 @@
 
 ## 0.2.0-alpha.3 (unreleased)
 
+Not yet on npm. The `@alpha` dist-tag still points at `0.2.0-alpha.2`, so
+everything in this section is available only from the main branch
+(`npx -y github:gryps-finance/gryps-agent-mcp`) until it is published. Against
+`0.2.0-alpha.2` this release adds eight tools (`gryps_next_step`,
+`gryps_prompt_library`, `gryps_paper_session`, `gryps_capabilities`,
+`gryps_measured_fees`, `gryps_margin_profile`, `gryps_position_size`,
+`gryps_funding_cost`) for eighteen in total, the `--verify` self-audit, the
+`--explorer-url` flag, MCP `instructions` on connect, and the seven journey
+prompts as native MCP prompts. Entries below run newest first.
+
+- `verify:package` and `verify:clean-install` now accept both shapes of
+  `npm pack --json` output. npm 11.5 and earlier emit an array of pack results;
+  newer npm emits a single object, which broke both release checks on a CI
+  runner that had upgraded npm. Release tooling only; the shipped package is
+  unchanged.
+
 - `gryps_funding_cost` now derives the candidate funding intervals instead of
   assuming a convention. The first cut listed one, four and eight hours because
   those are what venues usually use, which was a guess of exactly the kind this
@@ -21,6 +37,7 @@
   carry was reported at up to 24 bps; derived from the stamp it is 9.6 bps, and
   COTIUSDT at minus 21.8 bps an hour pays a long roughly 523 bps a day, which no
   hardcoded eight-hour assumption would have shown.
+- Test suite grew from 158 to 162.
 
 - Added `gryps_margin_profile`. Every `risk-config` read already returned a full
   maintenance-margin ladder per symbol, which this package validated and threw
@@ -31,10 +48,10 @@
   reports whether the position survives long enough for that move to arrive.
   On live BTC data, 150x leverage leaves about 27 bps of room and friction is 24
   of them: a trade the cost gate alone would pass. Arithmetic on published
-  parameters, labelled as such — the venue liquidates, this only calculates.
+  parameters, labelled as such. The venue liquidates, this only calculates.
 - Added `gryps_position_size`, which answers the question that follows "is this
-  worth trading". Bounded by four constraints — the cost gate, the caller's risk
-  budget, the venue bracket ceiling, and survivability — it returns the largest
+  worth trading". Bounded by four constraints (the cost gate, the caller's risk
+  budget, the venue bracket ceiling, and survivability), it returns the largest
   size satisfying all of them and names the one that binds. A calculator over
   supplied constraints, not a recommendation, and it sizes a claim without
   checking whether the claim is true.
@@ -43,16 +60,16 @@
   horizon was being priced as if holding were free. Reports the live rate, the
   per-event cost signed for the side held, and the all-in cost beside round-trip
   friction. The engine publishes the rate but not the interval, so the hold cost
-  is reported across every interval venues actually use, and the all-in figure
-  takes the most expensive candidate until the interval is confirmed. One
-  timestamp cannot settle it: a stamp on an eight-hour grid also sits on the
-  four-hour and one-hour grids.
+  is reported across every candidate interval, and the all-in figure takes the
+  most expensive candidate until the interval is confirmed with
+  `intervalHours`. This first cut assumed the candidates; the derivation entry
+  above replaced that assumption.
 - Added a client read for `/api/v1/market-data`, the surface found while probing
   for a bid/ask book. It has no depth, but it carries funding, mark price, and
   24h volume.
 - Test suite grew from 136 to 158. Eighteen tools.
 
-- Added gryps_measured_fees: reads the settlement contract event log from a
+- Added `gryps_measured_fees`: reads the settlement contract event log from a
   public block explorer and reports the median fee real fills actually paid,
   rather than what the schedule advertises. Keyless and read-only.
 - That measurement is one-way by construction, so it is also direct evidence on
@@ -62,7 +79,7 @@
   its sample size and an explicit caution, not as a settled answer.
 - A third outbound host is now reachable. The smoke test asserts the exact
   destination list, so this had to be recorded deliberately rather than drifting
-  in. SECURITY.md documents it and --explorer-url=off disables it.
+  in. SECURITY.md documents it and `--explorer-url=off` disables it.
 
 - Added `--verify`: every installed copy can audit itself. It scans the shipped
   JavaScript for the eight capabilities this package promises not to have, and
@@ -71,7 +88,7 @@
   by someone holding only the tarball. Exits non-zero on failure, and tests
   prove it catches each planted capability rather than always passing.
 
-- The server now sends MCP `instructions` on initialize. Clients pass these to
+- The server now sends MCP `instructions` in its `initialize` response. Clients pass these to
   the model automatically, so an agent is oriented before its first call rather
   than inferring the server from fourteen tool descriptions.
 - Added `gryps_capabilities`: what the server answers, what it refuses, which
